@@ -49,6 +49,8 @@
 #include <signal.h>
 #endif
 
+#include <zmq.h>
+
 using namespace std;
 
 static log_handler_t def_log_handler;

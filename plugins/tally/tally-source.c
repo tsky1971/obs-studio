@@ -4,6 +4,7 @@
 #include <util/dstr.h>
 #include <sys/stat.h>
 
+
 #define blog(log_level, format, ...) \
 	blog(log_level, "[tally: '%s'] " format, \
 			obs_source_get_name(context->source), ##__VA_ARGS__)
@@ -166,6 +167,7 @@ static void tally_render(void *data, gs_effect_t *effect)
 	gs_draw_sprite(context->image.texture, 0,
 			context->image.cx, context->image.cy);
 
+	
 	blog(LOG_DEBUG, "tally camera_index=%i", camera_index);
 }
 

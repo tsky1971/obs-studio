@@ -6,7 +6,12 @@ if(MSVC)
 endif()
 
 set(tally-switcher_SOURCES
-	tally-switcher.cpp)
+	tally-switcher.cpp
+	Tally.cpp
+	Tally.h
+	TallySettings.cpp
+	TallySettings.h
+	)
 
 add_library(tally-switcher MODULE
 	${tally-switcher_SOURCES})
