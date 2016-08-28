@@ -2,6 +2,9 @@ project(win-decklink)
 
 include(IDLFileHelper)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 set(win-decklink-sdk_IDLS
 	decklink-sdk/DeckLinkAPI.idl
 	)

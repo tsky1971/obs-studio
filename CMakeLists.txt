@@ -45,7 +45,7 @@ elseif(MSVC)
 endif()
 
 if(WIN32)
-	add_definitions(-DUNICODE -D_UNICODE -D_TIMESPEC_DEFINED)
+	add_definitions(-DUNICODE -D_UNICODE -D_TIMESPEC_DEFINED -DZMQ_STATIC)
 endif()
 
 if(MSVC)

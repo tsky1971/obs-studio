@@ -7,6 +7,8 @@
 #include "platform.hpp"
 #include "obs-app.hpp"
 
+#include <algorithm>    // std::max
+
 OBSProjector::OBSProjector(QWidget *widget, obs_source_t *source_)
 	: OBSQTDisplay                 (widget,
 	                                Qt::Window | Qt::FramelessWindowHint |

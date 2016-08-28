@@ -57,6 +57,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // QSV_Encoder.cpp : Defines the exported functions for the DLL application.
 //
 
+#define _WINSOCKAPI_
+
 #include "QSV_Encoder.h"
 #include "QSV_Encoder_Internal.h"
 #include <obs-module.h>

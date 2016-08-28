@@ -1,5 +1,7 @@
 #pragma once
 
+#define _WINSOCKAPI_
+
 #include "platform.hpp"
 
 #include <obs-module.h>

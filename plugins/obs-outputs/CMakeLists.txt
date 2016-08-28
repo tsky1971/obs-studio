@@ -19,6 +19,8 @@ else()
 	add_definitions(-DNO_CRYPTO)
 endif()
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
 
 if(WIN32)
 	set(obs-outputs_PLATFORM_DEPS

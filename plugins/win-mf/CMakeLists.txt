@@ -1,5 +1,8 @@
 project(win-mf)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 set(win-mf_SOURCES
 	mf-plugin.cpp
 	mf-aac.cpp

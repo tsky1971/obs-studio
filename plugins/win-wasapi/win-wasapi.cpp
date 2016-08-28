@@ -1,6 +1,10 @@
+
+#define _WINSOCKAPI_
+
 #include "enum-wasapi.hpp"
 
 #include <obs-module.h>
+
 #include <util/platform.h>
 #include <util/windows/HRError.hpp>
 #include <util/windows/ComPtr.hpp>

@@ -1,5 +1,8 @@
 project(obs-transitions)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 set(obs-transitions_SOURCES
 	obs-transitions.c
 	transition-slide.c

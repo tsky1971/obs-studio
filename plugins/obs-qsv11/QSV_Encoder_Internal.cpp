@@ -54,6 +54,8 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#define _WINSOCKAPI_
+
 #include "QSV_Encoder_Internal.h"
 #include "QSV_Encoder.h"
 #include "mfxastructures.h"

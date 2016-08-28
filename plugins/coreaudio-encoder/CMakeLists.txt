@@ -26,6 +26,10 @@ else()
 		${AUDIOTOOLBOX})
 endif()
 
+
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 add_library(coreaudio-encoder MODULE
 	${coreaudio-encoder_SOURCES}
 	${coreaudio-encoder_HEADERS})

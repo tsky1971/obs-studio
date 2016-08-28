@@ -46,6 +46,10 @@ find_package(Libcurl REQUIRED)
 include_directories(${LIBCURL_INCLUDE_DIRS})
 add_definitions(${LIBCURL_DEFINITIONS})
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
+
 if(WIN32)
 	set(obs_PLATFORM_SOURCES
 		platform-windows.cpp
@@ -220,6 +224,7 @@ target_link_libraries(obs
 	libff
 	Qt5::Widgets
 	${LIBCURL_LIBRARIES}
+	${ZMQ_LIBRARIES}
 	${obs_PLATFORM_LIBRARIES})
 
 define_graphic_modules(obs)

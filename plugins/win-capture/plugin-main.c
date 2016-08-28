@@ -1,3 +1,4 @@
+#define _WINSOCKAPI_
 #include <windows.h>
 #include <obs-module.h>
 #include <util/windows/win-version.h>

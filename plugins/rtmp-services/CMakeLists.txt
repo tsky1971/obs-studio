@@ -1,5 +1,8 @@
 project(rtmp-services)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 include_directories(${OBS_JANSSON_INCLUDE_DIRS})
 
 set(rtmp-services_SOURCES

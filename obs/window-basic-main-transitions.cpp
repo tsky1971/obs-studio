@@ -26,6 +26,8 @@
 #include "menu-button.hpp"
 #include "qt-wrappers.hpp"
 
+#include <zmq.h>
+
 using namespace std;
 
 Q_DECLARE_METATYPE(OBSScene);
@@ -564,9 +566,14 @@ void OBSBasic::SetCurrentScene(obs_source_t *scene, bool force)
 	UpdateSceneSelection(scene);
 
 	// @DigitalesStudio BEGIN
-	std::string sceneName = obs_source_get_name(scene);
+	if (scene != NULL) {
+		std::string sceneName = obs_source_get_name(scene);
 
-	
+		//  Send message to all subscribers
+		char message[128];
+		sprintf(message, "SCENE=%s", sceneName.c_str());
+		zmq_send(GetTallyPublisher(), message, sizeof(message), 0);
+	}	
 	// @DigitalesStudio END
 
 	bool userSwitched = (!force && !disableSaving);

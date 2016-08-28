@@ -39,21 +39,21 @@ std::string GenerateSpecifiedFilename(const char *extension, bool noSpace,
 QObject *CreateShortcutFilter();
 
 struct BaseLexer {
-	lexer lex;
+lexer lex;
 public:
-	inline BaseLexer() {lexer_init(&lex);}
-	inline ~BaseLexer() {lexer_free(&lex);}
-	operator lexer*() {return &lex;}
+	inline BaseLexer() { lexer_init(&lex); }
+	inline ~BaseLexer() { lexer_free(&lex); }
+	operator lexer*() { return &lex; }
 };
 
 class OBSTranslator : public QTranslator {
 	Q_OBJECT
 
 public:
-	virtual bool isEmpty() const override {return false;}
+	virtual bool isEmpty() const override { return false; }
 
 	virtual QString translate(const char *context, const char *sourceText,
-			const char *disambiguation, int n) const override;
+		const char *disambiguation, int n) const override;
 };
 
 class OBSApp : public QApplication {
@@ -83,19 +83,19 @@ public:
 	void AppInit();
 	bool OBSInit();
 
-	inline QMainWindow *GetMainWindow() const {return mainWindow.data();}
+	inline QMainWindow *GetMainWindow() const { return mainWindow.data(); }
 
-	inline config_t *GlobalConfig() const {return globalConfig;}
+	inline config_t *GlobalConfig() const { return globalConfig; }
 
 	inline const char *GetLocale() const
 	{
 		return locale.c_str();
 	}
 
-	inline const char *GetTheme() const {return theme.c_str();}
+	inline const char *GetTheme() const { return theme.c_str(); }
 	bool SetTheme(std::string name, std::string path = "");
 
-	inline lookup_t *GetTextLookup() const {return textLookup;}
+	inline lookup_t *GetTextLookup() const { return textLookup; }
 
 	inline const char *GetString(const char *lookupVal) const
 	{
@@ -131,6 +131,7 @@ public:
 		if (--sleepInhibitRefs == 0)
 			os_inhibit_sleep_set_active(sleepInhibitor, false);
 	}
+
 };
 
 int GetConfigPath(char *path, size_t size, const char *name);

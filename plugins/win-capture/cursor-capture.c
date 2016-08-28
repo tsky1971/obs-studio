@@ -1,3 +1,4 @@
+#define _WINSOCKAPI_
 #include <windows.h>
 #include <obs.h>
 #include "cursor-capture.h"

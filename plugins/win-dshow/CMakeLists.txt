@@ -3,6 +3,9 @@ project(win-dshow)
 find_package(FFmpeg REQUIRED COMPONENTS avcodec avutil)
 include_directories(${FFMPEG_INCLUDE_DIRS})
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 set(win-dshow_HEADERS
 	encode-dstr.hpp
 	ffmpeg-decode.h)

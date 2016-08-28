@@ -23,6 +23,22 @@
 #include "obs.h"
 #include "obs-internal.h"
 
+// @tsky begin
+void *g_ContextZMQ = NULL;
+void *g_TallyPublisherZMQ = NULL;
+
+void * GetContextZMQ()
+{
+	return g_ContextZMQ;
+}
+
+void * GetTallyPublisher()
+{
+	return g_TallyPublisherZMQ;
+}
+
+// @tsky end
+
 struct obs_core *obs = NULL;
 
 extern void add_default_module_paths(void);
@@ -734,6 +750,13 @@ static bool obs_init(const char *locale, const char *module_config_path,
 
 	log_system_info();
 
+	// @tsky begin	
+	g_ContextZMQ = zmq_ctx_new();
+	g_TallyPublisherZMQ = zmq_socket(g_ContextZMQ, ZMQ_PUB);
+	int rc = zmq_bind(g_TallyPublisherZMQ, "tcp://*:5556");
+	assert(rc == 0);
+	// @tsky end
+
 	if (!obs_init_data())
 		return false;
 	if (!obs_init_handlers())
@@ -837,6 +860,10 @@ void obs_shutdown(void)
 
 	if (obs->name_store_owned)
 		profiler_name_store_free(obs->name_store);
+
+	// @tsky
+	zmq_close(g_TallyPublisherZMQ);
+	zmq_ctx_destroy(g_ContextZMQ);
 
 	bfree(obs->module_config_path);
 	bfree(obs->locale);

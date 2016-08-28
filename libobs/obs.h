@@ -17,6 +17,12 @@
 
 #pragma once
 
+// @tsky begin
+#define NOMINMAX
+#include <zmq.h>
+#include <zmq_utils.h>
+// @tsky end
+
 #include "util/c99defs.h"
 #include "util/bmem.h"
 #include "util/profiler.h"
@@ -28,7 +34,6 @@
 #include "media-io/video-io.h"
 #include "callback/signal.h"
 #include "callback/proc.h"
-
 #include "obs-config.h"
 #include "obs-defs.h"
 #include "obs-data.h"
@@ -91,6 +96,16 @@ typedef struct obs_weak_service obs_weak_service_t;
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+	// @tsky begin
+
+	extern void *g_ContextZMQ;
+	extern void *g_TallyPublisherZMQ;
+
+	EXPORT void * GetContextZMQ();
+	EXPORT void * GetTallyPublisher();
+
+	// @tsky end
 
 /** Used for changing the order of items (for example, filters in a source,
  * or items in a scene) */

@@ -143,11 +143,28 @@ if (NOT ZLIB_BIN_FILES)
 		)
 endif()
 
+
+if (ZMQ_LIB)
+	GET_FILENAME_COMPONENT(ZMQ_BIN_PATH ${ZMQ_LIB} PATH)
+endif()
+file(GLOB ZMQBIN_FILES
+	"${ZLIB_BIN_PATH}/libzmq*.dll")
+
+if (NOT ZMQ_BIN_FILES)
+	file(GLOB ZMQ_BIN_FILES
+		"${ZMQ_INCLUDE_DIR}/../bin${_bin_suffix}/libzmq*.dll"
+		"${ZMQ_INCLUDE_DIR}/../bin/libzmq*.dll"
+		"${ZMQ_INCLUDE_DIR}/bin${_bin_suffix}/libzmq*.dll"
+		"${ZMQ_INCLUDE_DIR}/bin/libzmq*.dll"
+		)
+endif()
+
 if (CMAKE_CONFIGURATION_TYPES MATCHES "Debug")
 	file(GLOB QT_DEBUG_BIN_FILES
 		"${Qt5Core_DIR}/../../../bin/Qt5Cored.dll"
 		"${Qt5Core_DIR}/../../../bin/Qt5Guid.dll"
 		"${Qt5Core_DIR}/../../../bin/Qt5Widgetsd.dll"
+		"${Qt5Core_DIR}/../../../bin/Qt5Networkd.dll"
 		"${Qt5Core_DIR}/../../../bin/libGLESv2d.dll"
 		"${Qt5Core_DIR}/../../../bin/libEGLd.dll")
 	file(GLOB QT_DEBUG_PLAT_BIN_FILES
@@ -159,6 +176,7 @@ if (CMAKE_CONFIGURATION_TYPES MATCHES "Rel")
 		"${Qt5Core_DIR}/../../../bin/Qt5Core.dll"
 		"${Qt5Core_DIR}/../../../bin/Qt5Gui.dll"
 		"${Qt5Core_DIR}/../../../bin/Qt5Widgets.dll"
+		"${Qt5Core_DIR}/../../../bin/Qt5Network.dll"
 		"${Qt5Core_DIR}/../../../bin/libGLESv2.dll"
 		"${Qt5Core_DIR}/../../../bin/libEGL.dll")
 	file(GLOB QT_PLAT_BIN_FILES

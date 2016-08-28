@@ -1,5 +1,8 @@
 project(vlc-video)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 if(DISABLE_VLC)
 	message(STATUS "VLC video plugin disabled")
 	return()

@@ -17,7 +17,7 @@ else()
 endif()
 
 find_path(Jansson_INCLUDE_DIR
-	NAMES jansson.h
+	NAMES jansson/jansson.h
 	HINTS
 		ENV JanssonPath${_lib_suffix}
 		ENV JanssonPath

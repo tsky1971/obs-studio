@@ -1,5 +1,8 @@
 project(win-capture)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 set(win-capture_HEADERS
 	obfuscate.h
 	hook-helpers.h

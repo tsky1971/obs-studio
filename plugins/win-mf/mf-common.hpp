@@ -1,5 +1,11 @@
 #pragma once
 
+#define _WINSOCKAPI_
+
+#if (WINVER <= _WIN32_WINNT_WIN10)
+#undef WINVER
+#define WINVER _WIN32_WINNT_WIN10
+#endif
 #include <obs-module.h>
 
 #include <mfapi.h>

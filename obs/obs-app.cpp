@@ -49,8 +49,6 @@
 #include <signal.h>
 #endif
 
-#include <zmq.h>
-
 using namespace std;
 
 static log_handler_t def_log_handler;
@@ -1818,9 +1816,11 @@ int main(int argc, char *argv[])
 	fstream logFile;
 
 	curl_global_init(CURL_GLOBAL_ALL);
+
 	int ret = run_program(logFile, argc, argv);
 
 	blog(LOG_INFO, "Number of memory leaks: %ld", bnum_allocs());
 	base_set_log_handler(nullptr, nullptr);
+
 	return ret;
 }

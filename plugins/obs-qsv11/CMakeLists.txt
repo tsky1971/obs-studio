@@ -1,5 +1,8 @@
 project(obs-qsv11)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 include_directories(libmfx/include/msdk/include)
 include_directories(libmfx/include)
 

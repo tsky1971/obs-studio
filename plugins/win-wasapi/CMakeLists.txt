@@ -1,5 +1,8 @@
 project(win-wasapi)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 set(win-wasapi_HEADERS
 	enum-wasapi.hpp)
 

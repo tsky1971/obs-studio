@@ -1,3 +1,5 @@
+
+#define _WINSOCKAPI_
 #include <objbase.h>
 
 #include <obs-module.h>

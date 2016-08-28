@@ -5,6 +5,9 @@ if(MSVC)
 		w32-pthreads)
 endif()
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 set(tally_SOURCES
 	tally-source.c)
 
