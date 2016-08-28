@@ -148,7 +148,7 @@ if (ZMQ_LIB)
 	GET_FILENAME_COMPONENT(ZMQ_BIN_PATH ${ZMQ_LIB} PATH)
 endif()
 file(GLOB ZMQBIN_FILES
-	"${ZLIB_BIN_PATH}/libzmq*.dll")
+	"${ZMQ_BIN_PATH}/libzmq*.dll")
 
 if (NOT ZMQ_BIN_FILES)
 	file(GLOB ZMQ_BIN_FILES
@@ -158,6 +158,14 @@ if (NOT ZMQ_BIN_FILES)
 		"${ZMQ_INCLUDE_DIR}/bin/libzmq*.dll"
 		)
 endif()
+
+file(GLOB ZMQ_BIN_FILES
+		"${ZMQ_INCLUDE_DIR}/../bin${_bin_suffix}/libzmq*.dll"
+		"${ZMQ_INCLUDE_DIR}/../bin/libzmq*.dll"
+		"${ZMQ_INCLUDE_DIR}/bin${_bin_suffix}/libzmq*.dll"
+		"${ZMQ_INCLUDE_DIR}/bin/libzmq*.dll"
+		)
+		
 
 if (CMAKE_CONFIGURATION_TYPES MATCHES "Debug")
 	file(GLOB QT_DEBUG_BIN_FILES
@@ -192,6 +200,7 @@ set(ALL_BASE_BIN_FILES
 	${CURL_BIN_FILES}
 	${SSL_BIN_FILES}
 	${ZLIB_BIN_FILES}
+	${ZMQ_BIN_FILES}
 	${LIBFDK_BIN_FILES}
 	${FREETYPE_BIN_FILES}
 	${QT_ICU_BIN_FILES})
@@ -225,6 +234,7 @@ message(STATUS "Freetype files: ${FREETYPE_BIN_FILES}")
 message(STATUS "curl files: ${CURL_BIN_FILES}")
 message(STATUS "ssl files: ${SSL_BIN_FILES}")
 message(STATUS "zlib files: ${ZLIB_BIN_FILES}")
+message(STATUS "zmq files: ${ZMQ_BIN_FILES}")
 message(STATUS "QT Debug files: ${QT_DEBUG_BIN_FILES}")
 message(STATUS "QT Debug Platform files: ${QT_DEBUG_PLAT_BIN_FILES}")
 message(STATUS "QT Release files: ${QT_BIN_FILES}")
