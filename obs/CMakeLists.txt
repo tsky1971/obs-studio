@@ -30,6 +30,7 @@ else()
 endif()
 
 find_package(Qt5Widgets ${FIND_MODE})
+find_package(Qt5Network ${FIND_MODE})
 
 if(NOT Qt5Widgets_FOUND)
 	if (ENABLE_UI)
@@ -223,6 +224,7 @@ target_link_libraries(obs
 	libobs
 	libff
 	Qt5::Widgets
+	Qt5::Network
 	${LIBCURL_LIBRARIES}
 	${ZMQ_LIBRARIES}
 	${obs_PLATFORM_LIBRARIES})

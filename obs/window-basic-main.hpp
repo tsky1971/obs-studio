@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <QByteArray>
+#include <QtNetwork/QUdpSocket>
 #include <QBuffer>
 #include <QAction>
 #include <QSystemTrayIcon>
@@ -54,6 +56,8 @@ class QNetworkReply;
 #define SIMPLE_ENCODER_NVENC                   "nvenc"
 
 #define PREVIEW_EDGE_SIZE 10
+
+#define TALLY_PORT 5000
 
 struct BasicOutputHandler;
 
@@ -115,6 +119,8 @@ private:
 
 	OBSService service;
 	std::unique_ptr<BasicOutputHandler> outputHandler;
+
+	QUdpSocket *udpTallySignal;
 
 	gs_vertbuffer_t *box = nullptr;
 	gs_vertbuffer_t *boxLeft = nullptr;

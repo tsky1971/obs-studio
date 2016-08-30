@@ -210,6 +210,13 @@ OBSBasic::OBSBasic(QWidget *parent)
 			ui->statusbar, SLOT(UpdateCPUUsage()));
 	cpuUsageTimer->start(3000);
 
+	// @tsky begin
+	udpTallySignal = new QUdpSocket(this);
+	if (udpTallySignal) {
+		blog(LOG_INFO, "create udp socket for tally signal");
+	}
+	// @tsky end
+
 	DeleteKeys =
 #ifdef __APPLE__
 		QList<QKeySequence>{{Qt::Key_Backspace}} <<
@@ -1399,6 +1406,13 @@ OBSBasic::~OBSBasic()
 	 * libobs. */
 	delete cpuUsageTimer;
 	os_cpu_usage_info_destroy(cpuUsageInfo);
+
+	// @tsky begin
+	if (udpTallySignal != NULL) {
+		delete udpTallySignal;
+		udpTallySignal = NULL;
+	}
+	// @tsky end
 
 	obs_hotkey_set_callback_routing_func(nullptr, nullptr);
 	ClearHotkeys();
@@ -4370,6 +4384,11 @@ void OBSBasic::UpdateTitleBar()
 	name << "OBS ";
 	if (previewProgramMode)
 		name << "Studio ";
+
+	// @tsky
+	if (udpTallySignal) {
+		name << "Tally Socket created ";
+	}
 
 	name << App()->GetVersionString();
 	name << " - " << Str("TitleBar.Profile") << ": " << profile;

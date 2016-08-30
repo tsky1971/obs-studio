@@ -19,6 +19,7 @@
 #include <QWidgetAction>
 #include <QToolTip>
 #include <QMessageBox>
+#include <QtNetwork/QUdpSocket>
 #include <util/dstr.hpp>
 #include "window-basic-main.hpp"
 #include "display-helpers.hpp"
@@ -226,6 +227,28 @@ void OBSBasic::TransitionToScene(obs_scene_t *scene, bool force)
 {
 	obs_source_t *source = obs_scene_get_source(scene);
 	TransitionToScene(source, force);
+
+	// @DigitalesStudio BEGIN
+	if (scene != NULL) {
+		std::string sceneName = obs_source_get_name(source);
+
+		//  Send message to all subscribers
+		char message[128];
+		sprintf(message, "SCENE=%s", sceneName.c_str());
+		zmq_send(GetTallyPublisher(), message, sizeof(message), 0);
+
+		if (udpTallySignal != NULL) {
+			char cameraNum = sceneName.at(0);
+			quint64 result = udpTallySignal->writeDatagram(&cameraNum, sizeof(cameraNum), QHostAddress::Broadcast, TALLY_PORT);
+			if (result > 0) {
+				blog(LOG_INFO, "send tally udp signal %u", result);
+			}
+			else {
+				blog(LOG_ERROR, "send tally signal FAILS");
+			}
+		}
+	}
+	// @DigitalesStudio END
 }
 
 void OBSBasic::TransitionStopped()
@@ -565,16 +588,27 @@ void OBSBasic::SetCurrentScene(obs_source_t *scene, bool force)
 
 	UpdateSceneSelection(scene);
 
-	// @DigitalesStudio BEGIN
-	if (scene != NULL) {
-		std::string sceneName = obs_source_get_name(scene);
+	//// @DigitalesStudio BEGIN
+	//if (scene != NULL) {
+	//	std::string sceneName = obs_source_get_name(scene);
 
-		//  Send message to all subscribers
-		char message[128];
-		sprintf(message, "SCENE=%s", sceneName.c_str());
-		zmq_send(GetTallyPublisher(), message, sizeof(message), 0);
-	}	
-	// @DigitalesStudio END
+	//	//  Send message to all subscribers
+	//	char message[128];
+	//	sprintf(message, "SCENE=%s", sceneName.c_str());
+	//	zmq_send(GetTallyPublisher(), message, sizeof(message), 0);
+	//	
+	//	if (udpTallySignal != NULL) {
+	//		char cameraNum = sceneName.at(0);
+	//		quint64 result = udpTallySignal->writeDatagram(&cameraNum, sizeof(cameraNum),  QHostAddress::Broadcast, TALLY_PORT);
+	//		if (result > 0) {
+	//			blog(LOG_INFO, "send tally udp signal %u", result);
+	//		}
+	//		else {
+	//			blog(LOG_ERROR, "send tally signal FAILS");
+	//		}
+	//	}
+	//}	
+	//// @DigitalesStudio END
 
 	bool userSwitched = (!force && !disableSaving);
 	blog(LOG_INFO, "%s to scene '%s'",
