@@ -24,6 +24,7 @@ find_package(Libx264 QUIET)
 find_package(Libfdk QUIET)
 find_package(ssl QUIET)
 find_package(Qt5Core QUIET)
+find_package(Qt5Network REQUIRED)
 
 file(GLOB FFMPEG_BIN_FILES
 	"${FFMPEG_avcodec_INCLUDE_DIR}/../bin/avcodec-*.dll"
