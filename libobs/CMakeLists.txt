@@ -13,6 +13,9 @@ endif()
 
 if(UNIX)
 	find_package(DBus QUIET)
+	if (NOT APPLE)
+		find_package(X11_XCB REQUIRED)
+	endif()
 else()
 	set(HAVE_DBUS "0")
 endif()
@@ -127,6 +130,14 @@ elseif(UNIX)
 			${libobs_PLATFORM_DEPS}
 			${DBUS_LIBRARIES})
 	endif()
+
+	include_directories(
+		${X11_XCB_INCLUDE_DIRS})
+	add_definitions(
+		${X11_XCB_DEFINITIONS})
+	set(libobs_PLATFORM_DEPS
+		${libobs_PLATFORM_DEPS}
+		${X11_XCB_LIBRARIES})
 
 	if(${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
 		# use the sysinfo compatibility library on bsd
@@ -339,6 +350,12 @@ source_group("media-io\\Header Files" FILES ${libobs_mediaio_HEADERS})
 source_group("util\\Source Files" FILES ${libobs_util_SOURCES})
 source_group("util\\Header Files" FILES ${libobs_util_HEADERS})
 
+if(BUILD_CAPTIONS)
+	include_directories(${CMAKE_SOURCE_DIR}/deps/libcaption)
+	set(libobs_PLATFORM_DEPS
+		${libobs_PLATFORM_DEPS}
+		caption)
+endif()
 
 add_library(libobs SHARED ${libobs_SOURCES} ${libobs_HEADERS})
 

@@ -12,6 +12,8 @@ extern struct obs_source_info monitor_capture_info;
 extern struct obs_source_info window_capture_info;
 extern struct obs_source_info game_capture_info;
 
+static HANDLE init_hooks_thread = NULL;
+
 extern bool cached_versions_match(void);
 extern bool load_cached_graphics_offsets(bool is32bit);
 extern bool load_graphics_offsets(bool is32bit);
@@ -25,6 +27,37 @@ extern bool load_graphics_offsets(bool is32bit);
 #endif
 
 #define USE_HOOK_ADDRESS_CACHE false
+
+static DWORD WINAPI init_hooks(LPVOID unused)
+{
+	if (USE_HOOK_ADDRESS_CACHE &&
+	    cached_versions_match() &&
+	    load_cached_graphics_offsets(IS32BIT)) {
+
+		load_cached_graphics_offsets(!IS32BIT);
+		obs_register_source(&game_capture_info);
+
+	} else if (load_graphics_offsets(IS32BIT)) {
+		load_graphics_offsets(!IS32BIT);
+	}
+
+	UNUSED_PARAMETER(unused);
+	return 0;
+}
+
+void wait_for_hook_initialization(void)
+{
+	static bool initialized = false;
+
+	if (!initialized) {
+		if (init_hooks_thread) {
+			WaitForSingleObject(init_hooks_thread, INFINITE);
+			CloseHandle(init_hooks_thread);
+			init_hooks_thread = NULL;
+		}
+		initialized = true;
+	}
+}
 
 bool obs_module_load(void)
 {
@@ -53,17 +86,13 @@ bool obs_module_load(void)
 
 	obs_register_source(&window_capture_info);
 
-	if (USE_HOOK_ADDRESS_CACHE &&
-	    cached_versions_match() &&
-	    load_cached_graphics_offsets(IS32BIT)) {
-
-		load_cached_graphics_offsets(!IS32BIT);
-		obs_register_source(&game_capture_info);
-
-	} else if (load_graphics_offsets(IS32BIT)) {
-		load_graphics_offsets(!IS32BIT);
-		obs_register_source(&game_capture_info);
-	}
+	init_hooks_thread = CreateThread(NULL, 0, init_hooks, NULL, 0, NULL);
+	obs_register_source(&game_capture_info);
 
 	return true;
+}
+
+void obs_module_unload(void)
+{
+	wait_for_hook_initialization();
 }

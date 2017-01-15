@@ -112,7 +112,6 @@
             ],
             "recommended": {
                 "keyint": 2,
-                "profile": "main",
                 "max video bitrate": 3500,
                 "max audio bitrate": 160,
                 "x264opts": "scenecut=0"
@@ -132,9 +131,9 @@
                 }
             ],
             "recommended": {
-                "keyint": 4,
+                "keyint": 2,
                 "profile": "main",
-                "max video bitrate": 18000,
+                "max video bitrate": 51000,
                 "max audio bitrate": 160
             }
         },
@@ -327,10 +326,14 @@
                 {
                     "name": "EU",
                     "url": "rtmp://eumedia1.livecoding.tv/livecodingtv"
+                },
+                {
+                    "name": "Asia Pacific",
+                    "url": "rtmp://apmedia1.livecoding.tv/livecodingtv"
                 }
             ],
             "recommended": {
-                "max video bitrate": 1300
+                "max video bitrate": 2300
             }
         },
         {
@@ -339,15 +342,6 @@
                 {
                     "name": "Primary",
                     "url": "rtmp://streaming.watchpeoplecode.com/live"
-                }
-            ]
-        },
-        {
-            "name": "mSportz",
-            "servers": [
-                {
-                    "name": "Primary",
-                    "url": "rtmp://52.21.78.175/mSports"
                 }
             ]
         },
@@ -432,15 +426,6 @@
                 {
                     "name": "US: New York 2, NY",
                     "url": "rtmp://live-nyc2.vaughnsoft.net:443/live"
-                }
-            ]
-        },
-        {
-            "name": "Streamup",
-            "servers": [
-                {
-                    "name": "Worldwide",
-                    "url": "rtmp://origin.streamuplive.com/app"
                 }
             ]
         },
@@ -545,8 +530,8 @@
             "recommended": {
                 "keyint": 2,
                 "profile": "main",
-                "max video bitrate": 2500,
-                "max audio bitrate": 160
+                "max video bitrate": 4000,
+                "max audio bitrate": 128
             }
         },
         {
@@ -554,23 +539,39 @@
             "common": true,
             "servers": [
                 {
-                    "name": "US-West (San Jose, California)",
-                    "url": "rtmp://us-west.restream.io/live"
+                    "name": "EU-West (London, GB)",
+                    "url": "rtmp://eu-london.restream.io/live"
                 },
                 {
-                    "name": "US-West (Los Angeles, California)",
-                    "url": "rtmp://us-la.restream.io/live"
+                    "name": "EU-West (Amsterdam, NL)",
+                    "url": "rtmp://eu-ams.restream.io/live"
                 },
                 {
-                    "name": "US-West (Seattle, Washington)",
+                    "name": "EU-Central (Frankfurt, DE)",
+                    "url": "rtmp://eu-central.restream.io/live"
+                },
+                {
+                    "name": "EU-East (Falkenstein, DE)",
+                    "url": "rtmp://eu-east.restream.io/live"
+                },
+                {
+                    "name": "Russia (Moscow)",
+                    "url": "rtmp://ru.restream.io/live"
+                },
+                {
+                    "name": "US-West (Seattle, WA)",
                     "url": "rtmp://us-seattle.restream.io/live"
                 },
                 {
-                    "name": "US-Central (Dallas, Texas)",
+                    "name": "US-West (San Jose, CA)",
+                    "url": "rtmp://us-west.restream.io/live"
+                },
+                {
+                    "name": "US-Central (Dallas, TX)",
                     "url": "rtmp://us-central.restream.io/live"
                 },
                 {
-                    "name": "US-East (Washington, D.C.)",
+                    "name": "US-East (Washington, DC)",
                     "url": "rtmp://us-east.restream.io/live"
                 },
                 {
@@ -578,36 +579,16 @@
                     "url": "rtmp://na-toronto.restream.io/live"
                 },
                 {
-                    "name": "EU-Central (Frankfurt, Germany)",
-                    "url": "rtmp://eu-central.restream.io/live"
-                },
-                {
-                    "name": "EU-Central 2 (Frankfurt, Germany)",
-                    "url": "rtmp://eu.restream.io/live"
-                },
-                {
-                    "name": "EU-West (Amsterdam, Netherlands)",
-                    "url": "rtmp://eu-ams.restream.io/live"
-                },
-                {
-                    "name": "EU-West (London, Great Britain)",
-                    "url": "rtmp://eu-london.restream.io/live"
-                },
-                {
-                    "name": "Australia (Sydney)",
-                    "url": "rtmp://au.restream.io/live"
-                },
-                {
-                    "name": "Australia Secondary (Sydney)",
-                    "url": "rtmp://au-secondary.restream.io/live"
-                },
-                {
-                    "name": "South America (Sao Paulo, Brazil)",
+                    "name": "SA (Saint Paul, Brazil)",
                     "url": "rtmp://sa.restream.io/live"
                 },
                 {
                     "name": "Asia (Singapore)",
                     "url": "rtmp://singapore.restream.io/live"
+                },
+                {
+                    "name": "Australia (Sydney)",
+                    "url": "rtmp://au.restream.io/live"
                 }
             ],
             "recommended": {
@@ -696,6 +677,128 @@
             ],
             "recommended": {
                 "max video bitrate": 1500
+            }
+        },
+        {
+            "name": "Meridix Live Sports Platform",
+            "servers": [
+                {
+                    "name": "Primary",
+                    "url": "rtmp://publish.meridix.com/live"
+                }
+            ],
+            "recommended": {
+                "max video bitrate": 3500
+            }
+        },
+        {
+            "name": "Afreeca.TV",
+            "servers": [
+                {
+                    "name": "North America : US East",
+                    "url": "rtmp://rtmpmanager-aws-en-east.afreeca.tv/live"
+                },
+                {
+                    "name": "North America : US West",
+                     "url": "rtmp://rtmpmanager-aws-en-west.afreeca.tv/live"
+                },
+                {
+                    "name": "Asia : Singapore",
+                    "url": "rtmp://rtmpmanager-aws-sg.afreeca.tv/live"
+                },
+                {
+                    "name": "Asia : South Korea",
+                    "url": "rtmp://rtmpmanager-en-ko.afreeca.tv/live"
+                }
+            ],
+            "recommended": {
+                "keyint": 1,
+                "profile": "main",
+                "max video bitrate": 5000,
+                "max audio bitrate": 192
+            }
+        },
+        {
+            "name": "アフリカTV",
+            "servers": [
+                {
+                "name": "Japan",
+                "url": "rtmp://rtmpmanager-aws-jp.afreeca.tv/live/"
+                },
+                {
+                "name": "South Korea",
+                "url": "rtmp://rtmpmanager-jp.afreeca.tv/live/"
+                }
+            ],
+            "recommended": {
+                "keyint": 1,
+                "profile": "main",
+                "max video bitrate": 5000,
+                "max audio bitrate": 192
+            }
+        },
+        {
+            "name": "艾菲卡TV",
+            "servers": [
+                {
+                "name": "Taiwan",
+                "url": "rtmp://rtmpmanager-gcp-tw.afreeca.tv/live/"
+                },
+                {
+                    "name": "South Korea",
+                    "url": "rtmp://rtmpmanager-tw-ko.afreeca.tv/live/"
+                }
+            ],
+             "recommended": {
+                "keyint": 1,
+                "profile": "main",
+                "max video bitrate": 5000,
+                "max audio bitrate": 192
+            }
+        },
+        {
+            "name": "아프리카TV",
+            "servers": [
+                {
+                "name": "Korea",
+                "url": "rtmp://rtmpmanager-freecat.afreeca.tv/app/"
+                }
+            ],
+            "recommended": {
+                "keyint": 1,
+                "profile": "main",
+                "max video bitrate": 5000,
+                "max audio bitrate": 192
+            }
+        },
+        {
+            "name": "CAM4",
+            "servers": [
+                {
+                    "name": "CAM4",
+                    "url": "rtmp://origin.cam4.com/cam4-origin-live"
+                }
+            ],
+            "recommended": {
+                "keyint": 1,
+                "profile": "baseline",
+                "max video bitrate": 3000,
+                "max audio bitrate": 128
+            }
+        },
+        {
+            "name": "Picarto",
+            "servers": [
+                {
+                    "name": "USA/Canada",
+                    "url": "rtmp://live.us.picarto.tv/golive"
+                }
+            ],
+            "recommended": {
+                "keyint": 2,
+                "profile": "main",
+                "max video bitrate": 2000,
+                "max audio bitrate": 160
             }
         }
     ]
