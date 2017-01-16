@@ -4,6 +4,7 @@
 #include <obs-module.h>
 #include <sys/stat.h>
 #include <windows.h>
+#include <minmax.h>
 #include <gdiplus.h>
 #include <algorithm>
 #include <string>
