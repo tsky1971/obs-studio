@@ -201,14 +201,6 @@ EXPORT bool obs_volmeter_attach_source(obs_volmeter_t *volmeter,
 EXPORT void obs_volmeter_detach_source(obs_volmeter_t *volmeter);
 
 /**
- * @brief Get signal handler for the volume meter object
- * @param volmeter pointer to the volume meter object
- * @return signal handler
- */
-EXPORT signal_handler_t *obs_volmeter_get_signal_handler(
-		obs_volmeter_t *volmeter);
-
-/**
  * @brief Set the update interval for the volume meter
  * @param volmeter pointer to the volume meter object
  * @param ms update interval in ms
@@ -258,6 +250,8 @@ EXPORT void obs_volmeter_add_callback(obs_volmeter_t *volmeter,
 		obs_volmeter_updated_t callback, void *param);
 EXPORT void obs_volmeter_remove_callback(obs_volmeter_t *volmeter,
 		obs_volmeter_updated_t callback, void *param);
+
+EXPORT float obs_volmeter_get_cur_db(enum obs_fader_type type, const float def);
 
 #ifdef __cplusplus
 }

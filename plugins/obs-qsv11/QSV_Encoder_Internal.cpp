@@ -519,21 +519,24 @@ mfxStatus QSV_Encoder_Internal::Encode(uint64_t ts, uint8_t *pDataY,
 	}
 
 	mfxFrameSurface1 *pSurface = m_pmfxSurfaces[nSurfIdx];
-	if (m_bUseD3D11 || m_bD3D9HACK)
+	if (m_bUseD3D11 || m_bD3D9HACK) {
 		sts = m_mfxAllocator.Lock(m_mfxAllocator.pthis,
 				pSurface->Data.MemId, &(pSurface->Data));
+		MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+	}
 
 	sts = LoadNV12(pSurface, pDataY, pDataUV, strideY, strideUV);
+	MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
 	pSurface->Data.TimeStamp = ts;
 
-	if (m_bUseD3D11 || m_bD3D9HACK)
+	if (m_bUseD3D11 || m_bD3D9HACK) {
 		sts = m_mfxAllocator.Unlock(m_mfxAllocator.pthis,
 				pSurface->Data.MemId, &(pSurface->Data));
-
-	MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+		MSDK_CHECK_RESULT(sts, MFX_ERR_NONE, sts);
+	}
 
 	for (;;) {
-		// Encode a frame asychronously (returns immediately)
+		// Encode a frame asynchronously (returns immediately)
 		sts = m_pmfxENC->EncodeFrameAsync(NULL, pSurface,
 				&m_pTaskPool[nTaskIdx].mfxBS,
 				&m_pTaskPool[nTaskIdx].syncp);
@@ -594,10 +597,8 @@ mfxStatus QSV_Encoder_Internal::ClearData()
 
 	delete m_outBitstream.Data;
 
-	if (m_pmfxENC != NULL) {
-		delete m_pmfxENC;
-		m_pmfxENC = NULL;
-	}
+	delete m_pmfxENC;
+	m_pmfxENC = NULL;
 
 	if (m_bUseD3D11 || m_bD3D9HACK)
 		Release();

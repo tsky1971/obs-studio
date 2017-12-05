@@ -62,7 +62,11 @@ elseif(MSVC)
 endif()
 
 if(WIN32)
+<<<<<<< HEAD
 	add_definitions(-DUNICODE -D_UNICODE -D_TIMESPEC_DEFINED -DZMQ_STATIC)
+=======
+	add_definitions(-DUNICODE -D_UNICODE -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_WARNINGS)
+>>>>>>> upstream/master
 endif()
 
 if(MSVC)

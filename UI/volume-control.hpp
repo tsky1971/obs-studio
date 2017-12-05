@@ -2,8 +2,13 @@
 
 #include <obs.hpp>
 #include <QWidget>
+#include <QSharedPointer>
+#include <QTimer>
+#include <QMutex>
+#include <QList>
 
 class QPushButton;
+class VolumeMeterTimer;
 
 class VolumeMeter : public QWidget
 {
@@ -12,14 +17,28 @@ class VolumeMeter : public QWidget
 	Q_PROPERTY(QColor magColor READ getMagColor WRITE setMagColor DESIGNABLE true)
 	Q_PROPERTY(QColor peakColor READ getPeakColor WRITE setPeakColor DESIGNABLE true)
 	Q_PROPERTY(QColor peakHoldColor READ getPeakHoldColor WRITE setPeakHoldColor DESIGNABLE true)
+	Q_PROPERTY(QColor clipColor1 READ getClipColor1 WRITE setClipColor1 DESIGNABLE true)
+	Q_PROPERTY(QColor clipColor2 READ getClipColor2 WRITE setClipColor2 DESIGNABLE true)
 
 private:
-	float mag, peak, peakHold;
+	static QWeakPointer<VolumeMeterTimer> updateTimer;
+	QSharedPointer<VolumeMeterTimer> updateTimerRef;
+	float curMag = 0.0f, curPeak = 0.0f, curPeakHold = 0.0f;
+
+	inline void calcLevels();
+
+	QMutex dataMutex;
+	float mag = 0.0f, peak = 0.0f, peakHold = 0.0f;
+	float multiple = 0.0f;
+	uint64_t lastUpdateTime = 0;
+
 	QColor bkColor, magColor, peakColor, peakHoldColor;
-	QTimer *resetTimer;
+	QColor clipColor1, clipColor2;
 
 public:
 	explicit VolumeMeter(QWidget *parent = 0);
+	~VolumeMeter();
+
 	void setLevels(float nmag, float npeak, float npeakHold);
 	QColor getBkColor() const;
 	void setBkColor(QColor c);
@@ -29,11 +48,27 @@ public:
 	void setPeakColor(QColor c);
 	QColor getPeakHoldColor() const;
 	void setPeakHoldColor(QColor c);
+	QColor getClipColor1() const;
+	void setClipColor1(QColor c);
+	QColor getClipColor2() const;
+	void setClipColor2(QColor c);
 
 protected:
 	void paintEvent(QPaintEvent *event);
-private slots:
-	void resetState();
+};
+
+class VolumeMeterTimer : public QTimer {
+	Q_OBJECT
+
+public:
+	inline VolumeMeterTimer() : QTimer() {}
+
+	void AddVolControl(VolumeMeter *meter);
+	void RemoveVolControl(VolumeMeter *meter);
+
+protected:
+	virtual void timerEvent(QTimerEvent *event) override;
+	QList<VolumeMeter*> volumeMeters;
 };
 
 class QLabel;
@@ -66,7 +101,6 @@ private:
 private slots:
 	void VolumeChanged();
 	void VolumeMuted(bool muted);
-	void VolumeLevel(float mag, float peak, float peakHold, bool muted);
 
 	void SetMuted(bool checked);
 	void SliderChanged(int vol);

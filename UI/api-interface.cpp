@@ -239,6 +239,11 @@ struct OBSStudioAPI : obs_frontend_callbacks {
 		QMetaObject::invokeMethod(main, "StartReplayBuffer");
 	}
 
+	void obs_frontend_replay_buffer_save(void) override
+	{
+		QMetaObject::invokeMethod(main, "ReplayBufferSave");
+	}
+
 	void obs_frontend_replay_buffer_stop(void) override
 	{
 		QMetaObject::invokeMethod(main, "StopReplayBuffer");
@@ -352,6 +357,52 @@ struct OBSStudioAPI : obs_frontend_callbacks {
 	void obs_frontend_pop_ui_translation(void) override
 	{
 		App()->PopUITranslation();
+	}
+
+	void obs_frontend_set_streaming_service(obs_service_t *service) override
+	{
+		main->SetService(service);
+	}
+
+	obs_service_t *obs_frontend_get_streaming_service(void) override
+	{
+		return main->GetService();
+	}
+
+	void obs_frontend_save_streaming_service(void) override
+	{
+		main->SaveService();
+	}
+
+	bool obs_frontend_preview_program_mode_active(void) override
+	{
+		return main->IsPreviewProgramMode();
+	}
+
+	void obs_frontend_set_preview_program_mode(bool enable) override
+	{
+		main->SetPreviewProgramMode(enable);
+	}
+
+	obs_source_t *obs_frontend_get_current_preview_scene(void) override
+	{
+		OBSSource source = nullptr;
+
+		if (main->IsPreviewProgramMode()) {
+			source = main->GetCurrentSceneSource();
+			obs_source_addref(source);
+		}
+
+		return source;
+	}
+
+	void obs_frontend_set_current_preview_scene(obs_source_t *scene) override
+	{
+		if (main->IsPreviewProgramMode()) {
+			QMetaObject::invokeMethod(main, "SetCurrentScene",
+				Q_ARG(OBSSource, OBSSource(scene)),
+				Q_ARG(bool, false));
+		}
 	}
 
 	void on_load(obs_data_t *settings) override

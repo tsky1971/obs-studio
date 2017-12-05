@@ -198,6 +198,7 @@ struct TextSource {
 	bool read_from_file = false;
 	string file;
 	time_t file_timestamp = 0;
+	bool update_file = false;
 	float update_time_elapsed = 0.0f;
 
 	wstring text;
@@ -289,6 +290,7 @@ void TextSource::UpdateFont()
 	lf.lfUnderline = underline;
 	lf.lfStrikeOut = strikeout;
 	lf.lfQuality = ANTIALIASED_QUALITY;
+	lf.lfCharSet = DEFAULT_CHARSET;
 
 	if (!face.empty()) {
 		wcscpy(lf.lfFaceName, face.c_str());
@@ -775,10 +777,15 @@ inline void TextSource::Tick(float seconds)
 		time_t t = get_modified_timestamp(file.c_str());
 		update_time_elapsed = 0.0f;
 
-		if (file_timestamp != t) {
+		if (update_file) {
 			LoadFileText();
 			RenderText();
+			update_file = false;
+		}
+
+		if (file_timestamp != t) {
 			file_timestamp = t;
+			update_file = true;
 		}
 	}
 }

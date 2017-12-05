@@ -13,6 +13,7 @@ extern struct obs_output_info  ffmpeg_output;
 extern struct obs_output_info  ffmpeg_muxer;
 extern struct obs_output_info  replay_buffer;
 extern struct obs_encoder_info aac_encoder_info;
+extern struct obs_encoder_info opus_encoder_info;
 extern struct obs_encoder_info nvenc_encoder_info;
 
 static DARRAY(struct log_context {
@@ -115,6 +116,8 @@ cleanup:
 	destroy_log_context(log_context);
 }
 
+static const char *nvenc_check_name = "nvenc_check";
+
 static bool nvenc_supported(void)
 {
 	AVCodec *nvenc = avcodec_find_encoder_by_name("nvenc_h264");
@@ -132,8 +135,35 @@ static bool nvenc_supported(void)
 #else
 	lib = os_dlopen("libnvidia-encode.so.1");
 #endif
+	if (!lib)
+		return false;
+
 	os_dlclose(lib);
-	return !!lib;
+
+	bool success = false;
+	profile_start(nvenc_check_name);
+
+	AVCodecContext *context = avcodec_alloc_context3(nvenc);
+	if (!context)
+		goto cleanup;
+
+	context->bit_rate = 5000;
+	context->width = 640;
+	context->height = 480;
+	context->time_base = (AVRational) { 1, 25 };
+	context->pix_fmt = AV_PIX_FMT_YUV420P;
+
+	if (avcodec_open2(context, nvenc, NULL) < 0)
+		goto cleanup;
+
+	success = true;
+
+cleanup:
+	if (context)
+		avcodec_free_context(&context);
+
+	profile_end(nvenc_check_name);
+	return success;
 }
 
 bool obs_module_load(void)
@@ -148,6 +178,7 @@ bool obs_module_load(void)
 	obs_register_output(&ffmpeg_muxer);
 	obs_register_output(&replay_buffer);
 	obs_register_encoder(&aac_encoder_info);
+	obs_register_encoder(&opus_encoder_info);
 	if (nvenc_supported()) {
 		blog(LOG_INFO, "NVENC supported");
 		obs_register_encoder(&nvenc_encoder_info);

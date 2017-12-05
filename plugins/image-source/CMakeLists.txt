@@ -10,6 +10,7 @@ include_directories(${ZMQ_INCLUDE_DIRS})
 
 set(image-source_SOURCES
 	image-source.c
+	color-source.c
 	obs-slideshow.c)
 
 add_library(image-source MODULE

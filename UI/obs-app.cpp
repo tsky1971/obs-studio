@@ -20,6 +20,7 @@
 #include <wchar.h>
 #include <chrono>
 #include <ratio>
+#include <string>
 #include <sstream>
 #include <mutex>
 #include <util/bmem.h>
@@ -51,6 +52,8 @@
 #include <signal.h>
 #endif
 
+#include <iostream>
+
 using namespace std;
 
 static log_handler_t def_log_handler;
@@ -58,11 +61,17 @@ static log_handler_t def_log_handler;
 static string currentLogFile;
 static string lastLogFile;
 
-static bool portable_mode = false;
+bool portable_mode = false;
+static bool multi = false;
 static bool log_verbose = false;
 static bool unfiltered_log = false;
 bool opt_start_streaming = false;
 bool opt_start_recording = false;
+bool opt_studio_mode = false;
+bool opt_start_replaybuffer = false;
+bool opt_minimize_tray = false;
+bool opt_allow_opengl = false;
+bool opt_always_on_top = false;
 string opt_starting_collection;
 string opt_starting_profile;
 string opt_starting_scene;
@@ -156,6 +165,7 @@ QObject *CreateShortcutFilter()
 			case Qt::Key_Return:
 				if (dialog && pressed)
 					return false;
+				/* Falls through. */
 			default:
 				hotkey.key = obs_key_from_virtual_key(
 					event->nativeVirtualKey());
@@ -316,17 +326,31 @@ static void do_log(int log_level, const char *msg, va_list args, void *param)
 	vsnprintf(str, 4095, msg, args);
 
 #ifdef _WIN32
-	OutputDebugStringA(str);
-	OutputDebugStringA("\n");
+	if (IsDebuggerPresent()) {
+		int wNum = MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
+		if (wNum > 1) {
+			static wstring wide_buf;
+			static mutex wide_mutex;
+
+			lock_guard<mutex> lock(wide_mutex);
+			wide_buf.reserve(wNum + 1);
+			wide_buf.resize(wNum - 1);
+			MultiByteToWideChar(CP_UTF8, 0, str, -1, &wide_buf[0],
+					wNum);
+			wide_buf.push_back('\n');
+
+			OutputDebugStringW(wide_buf.c_str());
+		}
+	}
 #else
 	def_log_handler(log_level, msg, args2, nullptr);
 #endif
 
-	if (too_many_repeated_entries(logFile, msg, str))
-		return;
-
-	if (log_level <= LOG_INFO || log_verbose)
+	if (log_level <= LOG_INFO || log_verbose) {
+		if (too_many_repeated_entries(logFile, msg, str))
+			return;
 		LogStringChunk(logFile, str);
+	}
 
 #if defined(_WIN32) && defined(OBS_DEBUGBREAK_ON_ERROR)
 	if (log_level <= LOG_ERROR && IsDebuggerPresent())
@@ -343,6 +367,8 @@ bool OBSApp::InitGlobalConfigDefaults()
 	config_set_default_uint(globalConfig, "General", "MaxLogs", 10);
 	config_set_default_string(globalConfig, "General", "ProcessPriority",
 			"Normal");
+	config_set_default_bool(globalConfig, "General", "EnableAutoUpdates",
+			true);
 
 #if _WIN32
 	config_set_default_string(globalConfig, "Video", "Renderer",
@@ -378,11 +404,18 @@ bool OBSApp::InitGlobalConfigDefaults()
 	config_set_default_bool(globalConfig, "BasicWindow",
 			"SysTrayWhenStarted", false);
 	config_set_default_bool(globalConfig, "BasicWindow",
+			"SaveProjectors", false);
+	config_set_default_bool(globalConfig, "BasicWindow",
 			"ShowTransitions", true);
 	config_set_default_bool(globalConfig, "BasicWindow",
 			"ShowListboxToolbars", true);
 	config_set_default_bool(globalConfig, "BasicWindow",
 			"ShowStatusBar", true);
+
+#ifdef _WIN32
+	config_set_default_bool(globalConfig, "Audio", "DisableAudioDucking",
+			true);
+#endif
 
 #ifdef __APPLE__
 	config_set_default_bool(globalConfig, "Video", "DisableOSXVSync", true);
@@ -426,7 +459,13 @@ static bool MakeUserDirs()
 		return false;
 	if (!do_mkdir(path))
 		return false;
+
+	if (GetConfigPath(path, sizeof(path), "obs-studio/updates") <= 0)
+		return false;
+	if (!do_mkdir(path))
+		return false;
 #endif
+
 	if (GetConfigPath(path, sizeof(path), "obs-studio/plugin_config") <= 0)
 		return false;
 	if (!do_mkdir(path))
@@ -546,6 +585,7 @@ static string GetSceneCollectionFileFromName(const char *name)
 bool OBSApp::InitGlobalConfig()
 {
 	char path[512];
+	bool changed = false;
 
 	int len = GetConfigPath(path, sizeof(path),
 			"obs-studio/global.ini");
@@ -569,6 +609,7 @@ bool OBSApp::InitGlobalConfig()
 			config_set_string(globalConfig,
 					"Basic", "SceneCollectionFile",
 					path.c_str());
+			changed = true;
 		}
 	}
 
@@ -580,8 +621,23 @@ bool OBSApp::InitGlobalConfig()
 					opt_starting_profile.c_str());
 			config_set_string(globalConfig, "Basic", "ProfileDir",
 					path.c_str());
+			changed = true;
 		}
 	}
+
+	if (!config_has_user_value(globalConfig, "General", "Pre19Defaults")) {
+		uint32_t lastVersion = config_get_int(globalConfig, "General",
+				"LastVersion");
+		bool useOldDefaults = lastVersion &&
+		    lastVersion < MAKE_SEMANTIC_VERSION(19, 0, 0);
+
+		config_set_bool(globalConfig, "General", "Pre19Defaults",
+				useOldDefaults);
+		changed = true;
+	}
+
+	if (changed)
+		config_save_safe(globalConfig, "tmp", nullptr);
 
 	return InitGlobalConfigDefaults();
 }
@@ -682,14 +738,19 @@ bool OBSApp::SetTheme(std::string name, std::string path)
 bool OBSApp::InitTheme()
 {
 	const char *themeName = config_get_string(globalConfig, "General",
-			"Theme");
+			"CurrentTheme");
+	if (!themeName) {
+		/* Use deprecated "Theme" value if available */
+		themeName = config_get_string(globalConfig,
+				"General", "Theme");
+		if (!themeName)
+			themeName = "Default";
+	}
 
-	if (!themeName)
-		themeName = "Default";
+	if (strcmp(themeName, "Default") != 0 && SetTheme(themeName))
+		return true;
 
-	stringstream t;
-	t << themeName;
-	return SetTheme(t.str());
+	return SetTheme("Default");
 }
 
 OBSApp::OBSApp(int &argc, char **argv, profiler_name_store_t *store)
@@ -701,6 +762,13 @@ OBSApp::OBSApp(int &argc, char **argv, profiler_name_store_t *store)
 
 OBSApp::~OBSApp()
 {
+#ifdef _WIN32
+	bool disableAudioDucking = config_get_bool(globalConfig, "Audio",
+			"DisableAudioDucking");
+	if (disableAudioDucking)
+		DisableAudioDucking(false);
+#endif
+
 #ifdef __APPLE__
 	bool vsyncDiabled = config_get_bool(globalConfig, "Video",
 			"DisableOSXVSync");
@@ -819,6 +887,13 @@ void OBSApp::AppInit()
 	config_set_default_string(globalConfig, "Basic", "SceneCollectionFile",
 			Str("Untitled"));
 
+#ifdef _WIN32
+	bool disableAudioDucking = config_get_bool(globalConfig, "Audio",
+			"DisableAudioDucking");
+	if (disableAudioDucking)
+		DisableAudioDucking(true);
+#endif
+
 #ifdef __APPLE__
 	if (config_get_bool(globalConfig, "Video", "DisableOSXVSync"))
 		EnableOSXVSync(false);
@@ -870,6 +945,8 @@ bool OBSApp::OBSInit()
 
 		blog(LOG_INFO, "Portable mode: %s",
 				portable_mode ? "true" : "false");
+
+		setQuitOnLastWindowClosed(false);
 
 		mainWindow = new OBSBasic();
 
@@ -1153,8 +1230,16 @@ static void create_log_file(fstream &logFile)
 	dst << "obs-studio/logs/" << currentLogFile.c_str();
 
 	BPtr<char> path(GetConfigPathPtr(dst.str().c_str()));
+
+#ifdef _WIN32
+	BPtr<wchar_t> wpath;
+	os_utf8_to_wcs_ptr(path, 0, &wpath);
+	logFile.open(wpath,
+			ios_base::in | ios_base::out | ios_base::trunc);
+#else
 	logFile.open(path,
 			ios_base::in | ios_base::out | ios_base::trunc);
+#endif
 
 	if (logFile.is_open()) {
 		delete_oldest_file("obs-studio/logs");
@@ -1242,20 +1327,6 @@ static int run_program(fstream &logFile, int argc, char *argv[])
 	profiler_start();
 	profile_register_root(run_program_init, 0);
 
-	auto PrintInitProfile = [&]()
-	{
-		auto snap = GetSnapshot();
-
-		profiler_snapshot_filter_roots(snap.get(), [](void *data,
-					const char *name, bool *remove)
-		{
-			*remove = (*static_cast<const char**>(data)) != name;
-			return true;
-		}, static_cast<void*>(&run_program_init));
-
-		profiler_print(snap.get());
-	};
-
 	ScopeProfiler prof{run_program_init};
 
 	QCoreApplication::addLibraryPath(".");
@@ -1270,6 +1341,50 @@ static int run_program(fstream &logFile, int argc, char *argv[])
 		delete_oldest_file("obs-studio/profiler_data");
 
 		program.installTranslator(&translator);
+
+#ifdef _WIN32
+		/* --------------------------------------- */
+		/* check and warn if already running       */
+
+		bool already_running = false;
+		RunOnceMutex rom = GetRunOnceMutex(already_running);
+
+		if (already_running && !multi) {
+			blog(LOG_WARNING, "\n================================");
+			blog(LOG_WARNING, "Warning: OBS is already running!");
+			blog(LOG_WARNING, "================================\n");
+
+			QMessageBox::StandardButtons buttons(
+					QMessageBox::Yes | QMessageBox::Cancel);
+			QMessageBox mb(QMessageBox::Question,
+					QTStr("AlreadyRunning.Title"),
+					QTStr("AlreadyRunning.Text"),
+					buttons,
+					nullptr);
+			mb.setButtonText(QMessageBox::Yes,
+					QTStr("AlreadyRunning.LaunchAnyway"));
+			mb.setButtonText(QMessageBox::Cancel, QTStr("Cancel"));
+			mb.setDefaultButton(QMessageBox::Cancel);
+
+			QMessageBox::StandardButton button;
+			button = (QMessageBox::StandardButton)mb.exec();
+			if (button == QMessageBox::Cancel) {
+				blog(LOG_INFO, "User shut down the program "
+						"because OBS was already "
+						"running");
+				return 0;
+			}
+
+			blog(LOG_WARNING, "User is now running a secondary "
+					"instance of OBS!");
+
+		} else if (already_running && multi) {
+			blog(LOG_INFO, "User enabled --multi flag and is now "
+					"running multiple instances of OBS.");
+		}
+
+		/* --------------------------------------- */
+#endif
 
 		if (!program.OBSInit())
 			return 0;
@@ -1286,7 +1401,7 @@ static int run_program(fstream &logFile, int argc, char *argv[])
 	return ret;
 }
 
-#define MAX_CRASH_REPORT_SIZE (50 * 1024)
+#define MAX_CRASH_REPORT_SIZE (150 * 1024)
 
 #ifdef _WIN32
 
@@ -1310,8 +1425,16 @@ static void main_crash_handler(const char *format, va_list args, void *param)
 	BPtr<char> path(GetConfigPathPtr(name.c_str()));
 
 	fstream file;
-	file.open(path, ios_base::in | ios_base::out | ios_base::trunc |
+
+#ifdef _WIN32
+	BPtr<wchar_t> wpath;
+	os_utf8_to_wcs_ptr(path, 0, &wpath);
+	file.open(wpath, ios_base::in | ios_base::out | ios_base::trunc |
 			ios_base::binary);
+#else
+	file.open(path,	ios_base::in | ios_base::out | ios_base::trunc |
+			ios_base::binary);
+#endif
 	file << text;
 	file.close();
 
@@ -1723,6 +1846,7 @@ int main(int argc, char *argv[])
 #endif
 
 #ifdef _WIN32
+	SetErrorMode(SEM_FAILCRITICALERRORS);
 	load_debug_privilege();
 	base_set_crash_handler(main_crash_handler, nullptr);
 #endif
@@ -1737,8 +1861,14 @@ int main(int argc, char *argv[])
 		if (arg_is(argv[i], "--portable", "-p")) {
 			portable_mode = true;
 
+		} else if (arg_is(argv[i], "--multi", "-m")) {
+			multi = true;
+
 		} else if (arg_is(argv[i], "--verbose", nullptr)) {
 			log_verbose = true;
+
+		} else if (arg_is(argv[i], "--always-on-top", nullptr)) {
+			opt_always_on_top = true;
 
 		} else if (arg_is(argv[i], "--unfiltered_log", nullptr)) {
 			unfiltered_log = true;
@@ -1749,6 +1879,9 @@ int main(int argc, char *argv[])
 		} else if (arg_is(argv[i], "--startrecording", nullptr)) {
 			opt_start_recording = true;
 
+		} else if (arg_is(argv[i], "--startreplaybuffer", nullptr)) {
+			opt_start_replaybuffer = true;
+
 		} else if (arg_is(argv[i], "--collection", nullptr)) {
 			if (++i < argc) opt_starting_collection = argv[i];
 
@@ -1757,6 +1890,42 @@ int main(int argc, char *argv[])
 
 		} else if (arg_is(argv[i], "--scene", nullptr)) {
 			if (++i < argc) opt_starting_scene = argv[i];
+
+		} else if (arg_is(argv[i], "--minimize-to-tray", nullptr)) {
+			opt_minimize_tray = true;
+
+		} else if (arg_is(argv[i], "--studio-mode", nullptr)) {
+			opt_studio_mode = true;
+
+		} else if (arg_is(argv[i], "--allow-opengl", nullptr)) {
+			opt_allow_opengl = true;
+
+		} else if (arg_is(argv[i], "--help", "-h")) {
+			std::cout <<
+			"--help, -h: Get list of available commands.\n\n" << 
+			"--startstreaming: Automatically start streaming.\n" <<
+			"--startrecording: Automatically start recording.\n" <<
+			"--startreplaybuffer: Start replay buffer.\n\n" <<
+			"--collection <string>: Use specific scene collection."
+				<< "\n" <<
+			"--profile <string>: Use specific profile.\n" <<
+			"--scene <string>: Start with specific scene.\n\n" <<
+			"--studio-mode: Enable studio mode.\n" <<
+			"--minimize-to-tray: Minimize to system tray.\n" <<
+			"--portable, -p: Use portable mode.\n" <<
+			"--multi, -m: Don't warn when launching multiple instances.\n\n" <<
+			"--verbose: Make log more verbose.\n" <<
+			"--always-on-top: Start in 'always on top' mode.\n\n" <<
+			"--unfiltered_log: Make log unfiltered.\n\n" <<
+			"--allow-opengl: Allow OpenGL on Windows.\n\n" <<
+			"--version, -V: Get current version.\n";
+
+			exit(0);
+
+		} else if (arg_is(argv[i], "--version", "-V")) {
+			std::cout << "OBS Studio - " << 
+				App()->GetVersionString() << "\n";
+			exit(0);
 		}
 	}
 

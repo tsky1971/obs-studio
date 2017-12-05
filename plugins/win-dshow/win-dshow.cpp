@@ -118,6 +118,7 @@ public:
 	inline ~Decoder() {ffmpeg_decode_free(&decode);}
 
 	inline operator ffmpeg_decode*() {return &decode;}
+	inline ffmpeg_decode *operator->() {return &decode;}
 };
 
 class CriticalSection {
@@ -166,6 +167,7 @@ struct DShowInput {
 	Device       device;
 	bool         deactivateWhenNotShowing = false;
 	bool         deviceHasAudio = false;
+	bool         deviceHasSeparateAudioFilter = false;
 	bool         flip = false;
 	bool         active = false;
 
@@ -209,8 +211,14 @@ struct DShowInput {
 		if (!thread)
 			throw "Failed to create thread";
 
+		deactivateWhenNotShowing =
+			obs_data_get_bool(settings, DEACTIVATE_WNS);
+
 		if (obs_data_get_bool(settings, "active")) {
-			QueueAction(Action::Activate);
+			bool showing = obs_source_showing(source);
+			if (!deactivateWhenNotShowing || showing)
+				QueueAction(Action::Activate);
+
 			active = true;
 		}
 	}
@@ -398,6 +406,21 @@ static inline audio_format ConvertAudioFormat(AudioFormat format)
 	}
 }
 
+static inline enum speaker_layout convert_speaker_layout(uint8_t channels)
+{
+	switch (channels) {
+	case 0:     return SPEAKERS_UNKNOWN;
+	case 1:     return SPEAKERS_MONO;
+	case 2:     return SPEAKERS_STEREO;
+	case 3:     return SPEAKERS_2POINT1;
+	case 4:     return SPEAKERS_QUAD;
+	case 5:     return SPEAKERS_4POINT1;
+	case 6:     return SPEAKERS_5POINT1;
+	case 8:     return SPEAKERS_7POINT1;
+	default:    return SPEAKERS_UNKNOWN;
+	}
+}
+
 //#define LOG_ENCODED_VIDEO_TS 1
 //#define LOG_ENCODED_AUDIO_TS 1
 
@@ -511,21 +534,30 @@ void DShowInput::OnEncodedAudioData(enum AVCodecID id,
 		}
 	}
 
-	bool got_output;
-	int len = ffmpeg_decode_audio(audio_decoder, data, size,
-			&audio, &got_output);
-	if (len < 0) {
-		blog(LOG_WARNING, "Error decoding audio");
-		return;
-	}
+	do {
+		bool got_output;
+		int len = ffmpeg_decode_audio(audio_decoder, data, size,
+				&audio, &got_output);
+		if (len < 0) {
+			blog(LOG_WARNING, "Error decoding audio");
+			return;
+		}
 
-	if (got_output) {
-		audio.timestamp = (uint64_t)ts * 100;
+		if (got_output) {
+			audio.timestamp = (uint64_t)ts * 100;
 #if LOG_ENCODED_AUDIO_TS
-		blog(LOG_DEBUG, "audio ts: %llu", audio.timestamp);
+			blog(LOG_DEBUG, "audio ts: %llu", audio.timestamp);
 #endif
-		obs_source_output_audio(source, &audio);
-	}
+			obs_source_output_audio(source, &audio);
+		} else {
+			break;
+		}
+
+		ts += int64_t(audio_decoder->frame->nb_samples) * 10000000LL /
+			int64_t(audio_decoder->frame->sample_rate);
+		size -= (size_t)len;
+		data += len;
+	} while (size > 0);
 }
 
 void DShowInput::OnAudioData(const AudioConfig &config,
@@ -545,7 +577,7 @@ void DShowInput::OnAudioData(const AudioConfig &config,
 		return;
 	}
 
-	audio.speakers        = (enum speaker_layout)config.channels;
+	audio.speakers        = convert_speaker_layout(config.channels);
 	audio.format          = ConvertAudioFormat(config.format);
 	audio.samples_per_sec = (uint32_t)config.sampleRate;
 	audio.data[0]         = data;
@@ -739,12 +771,7 @@ inline void DShowInput::SetupBuffering(obs_data_t *settings)
 	else
 		useBuffering = bufType == BufferingType::On;
 
-	if (useBuffering)
-		flags &= ~OBS_SOURCE_FLAG_UNBUFFERED;
-	else
-		flags |= OBS_SOURCE_FLAG_UNBUFFERED;
-
-	obs_source_set_flags(source, flags);
+	obs_source_set_async_unbuffered(source, !useBuffering);
 }
 
 static DStr GetVideoFormatName(VideoFormat format);
@@ -821,6 +848,7 @@ bool DShowInput::UpdateVideoConfig(obs_data_t *settings)
 	videoConfig.internalFormat   = format;
 
 	deviceHasAudio = dev.audioAttached;
+	deviceHasSeparateAudioFilter = dev.separateAudioFilter;
 
 	videoConfig.callback = std::bind(&DShowInput::OnVideoData, this,
 			placeholders::_1, placeholders::_2,
@@ -838,6 +866,8 @@ bool DShowInput::UpdateVideoConfig(obs_data_t *settings)
 
 	if (videoConfig.internalFormat == VideoFormat::MJPEG) {
 		videoConfig.format = VideoFormat::XRGB;
+		videoConfig.useDefaultConfig = false;
+
 		if (!device.SetVideoConfig(&videoConfig)) {
 			blog(LOG_WARNING, "%s: device.SetVideoConfig (XRGB) "
 					"failed", obs_source_get_name(source));
@@ -895,7 +925,8 @@ bool DShowInput::UpdateAudioConfig(obs_data_t *settings)
 		return true;
 	}
 
-	audioConfig.useVideoDevice = !useCustomAudio;
+	audioConfig.useVideoDevice = !useCustomAudio && !deviceHasSeparateAudioFilter;
+	audioConfig.useSeparateAudioFilter = deviceHasSeparateAudioFilter;
 
 	audioConfig.callback = std::bind(&DShowInput::OnAudioData, this,
 			placeholders::_1, placeholders::_2,
@@ -916,8 +947,12 @@ bool DShowInput::UpdateAudioConfig(obs_data_t *settings)
 	blog(LOG_INFO, "\tusing video device audio: %s",
 			audioConfig.useVideoDevice ? "yes" : "no");
 
-	if (!audioConfig.useVideoDevice)
-		blog(LOG_INFO, "\taudio device: %s", (const char*)name_utf8);
+	if (!audioConfig.useVideoDevice) {
+		if (audioConfig.useSeparateAudioFilter)
+			blog(LOG_INFO, "\tseparate audio filter");
+		else
+			blog(LOG_INFO, "\taudio device: %s", (const char*)name_utf8);
+	}
 
 	const char *mode = "";
 

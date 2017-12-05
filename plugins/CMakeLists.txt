@@ -1,3 +1,8 @@
+option(DISABLE_PLUGINS "Disable building of OBS plugins" OFF)
+if(DISABLE_PLUGINS)
+	message(STATUS "DISABLE_PLUGINS is set; building of plugins is disabled.")
+	return()
+endif()
 
 if(WIN32)
 	option(BUILD_CA_ENCODER "Build CoreAudio encoder module" ON)
@@ -54,6 +59,12 @@ if(WIN32 OR APPLE)
 		else()
 			message(STATUS "obs-browser submodule not found!  Please fetch submodules.  obs-browser plugin disabled.")
 		endif()
+	endif()
+
+	if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/obs-vst/CMakeLists.txt")
+		add_subdirectory(obs-vst)
+	else()
+		message(STATUS "obs-vst submodule not found!  Please fetch/update submodules.  obs-vst plugin disabled.")
 	endif()
 endif()
 
