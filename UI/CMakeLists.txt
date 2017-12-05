@@ -36,11 +36,8 @@ else()
 endif()
 
 find_package(Qt5Widgets ${FIND_MODE})
-<<<<<<< HEAD
 find_package(Qt5Network ${FIND_MODE})
-=======
 find_package(FFmpeg REQUIRED COMPONENTS avcodec avutil avformat)
->>>>>>> upstream/master
 
 if(NOT Qt5Widgets_FOUND)
 	if (ENABLE_UI)

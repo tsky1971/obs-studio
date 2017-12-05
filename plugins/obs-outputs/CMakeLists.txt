@@ -19,10 +19,10 @@ else()
 	add_definitions(-DNO_CRYPTO)
 endif()
 
-<<<<<<< HEAD
+
 find_package(ZMQ REQUIRED)
 include_directories(${ZMQ_INCLUDE_DIRS})
-=======
+
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ftl-sdk/CMakeLists.txt")
 	find_package(Libcurl REQUIRED)
 
@@ -80,7 +80,7 @@ configure_file(
 	"${CMAKE_BINARY_DIR}/plugins/obs-outputs/config/obs-outputs-config.h")
 
 include_directories("${CMAKE_BINARY_DIR}/plugins/obs-outputs/config")
->>>>>>> upstream/master
+
 
 if(WIN32)
 	set(obs-outputs_PLATFORM_DEPS
