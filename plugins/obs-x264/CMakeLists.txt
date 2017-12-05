@@ -1,5 +1,8 @@
 project(obs-x264)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 find_package(Libx264 REQUIRED)
 include_directories(${LIBX264_INCLUDE_DIRS})
 add_definitions(${LIBX264_DEFINITIONS})

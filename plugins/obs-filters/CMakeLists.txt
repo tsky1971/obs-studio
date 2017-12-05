@@ -1,5 +1,8 @@
 project(obs-filters)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 find_package(Libspeexdsp QUIET)
 if(LIBSPEEXDSP_FOUND)
 	set(obs-filters_LIBSPEEXDSP_SOURCES

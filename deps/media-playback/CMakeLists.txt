@@ -1,5 +1,8 @@
 project(media-playback)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 find_package(FFmpeg REQUIRED
 	COMPONENTS avcodec avdevice avutil avformat)
 

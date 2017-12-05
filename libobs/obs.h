@@ -20,7 +20,7 @@
 // @tsky begin
 #define NOMINMAX
 #include <zmq.h>
-#include <zmq_utils.h>
+//#include <zmq_utils.h>
 // @tsky end
 
 #include "util/c99defs.h"

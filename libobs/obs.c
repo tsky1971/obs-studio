@@ -15,6 +15,11 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ******************************************************************************/
 
+// @tsky begin
+#include <zmq.h>
+//#include <zmq_utils.h>
+// @tsky end
+
 #include <inttypes.h>
 
 #include "graphics/matrix4.h"

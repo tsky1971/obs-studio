@@ -5,6 +5,9 @@ if(DISABLE_FREETYPE)
 	return()
 endif()
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 find_package(Freetype QUIET)
 if(NOT FREETYPE_FOUND AND ENABLE_FREETYPE)
 	message(FATAL_ERROR "Freetype library not found but set as enabled")

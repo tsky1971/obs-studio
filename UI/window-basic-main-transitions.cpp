@@ -234,8 +234,8 @@ obs_source_t *OBSBasic::FindTransition(const char *name)
 void OBSBasic::TransitionToScene(OBSScene scene, bool force, bool direct)
 {
 	obs_source_t *source = obs_scene_get_source(scene);
-<<<<<<< HEAD
-	TransitionToScene(source, force);
+
+	TransitionToScene(source, force, direct);
 
 	// @DigitalesStudio BEGIN
 	if (scene != NULL) {
@@ -258,9 +258,6 @@ void OBSBasic::TransitionToScene(OBSScene scene, bool force, bool direct)
 		}
 	}
 	// @DigitalesStudio END
-=======
-	TransitionToScene(source, force, direct);
->>>>>>> upstream/master
 }
 
 void OBSBasic::TransitionStopped()

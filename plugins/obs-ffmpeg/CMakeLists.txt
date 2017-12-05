@@ -1,5 +1,8 @@
 project(obs-ffmpeg)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 if(MSVC)
 	set(obs-ffmpeg_PLATFORM_DEPS
 		w32-pthreads)
