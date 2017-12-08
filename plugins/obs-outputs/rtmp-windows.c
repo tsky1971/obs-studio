@@ -1,6 +1,7 @@
 #ifdef _WIN32
 #include "rtmp-stream.h"
 #include <winsock2.h>
+#include <Ws2ipdef.h>
 
 static void fatal_sock_shutdown(struct rtmp_stream *stream)
 {
@@ -97,9 +98,9 @@ static void ideal_send_backlog_event(struct rtmp_stream *stream,
 	ULONG ideal_send_backlog;
 	int ret;
 
-	ret = idealsendbacklogquery(
-			stream->rtmp.m_sb.sb_socket,
-			&ideal_send_backlog);
+	//ret = idealsendbacklogquery(
+	//		stream->rtmp.m_sb.sb_socket,
+	//		&ideal_send_backlog);
 	if (ret == 0) {
 		int cur_tcp_bufsize;
 		int size = sizeof(cur_tcp_bufsize);
@@ -347,7 +348,7 @@ static inline void socket_thread_windows_internal(struct rtmp_stream *stream)
 void *socket_thread_windows(void *data)
 {
 	struct rtmp_stream *stream = data;
-	socket_thread_windows_internal(stream);
+	//socket_thread_windows_internal(stream);
 	return NULL;
 }
 #endif
