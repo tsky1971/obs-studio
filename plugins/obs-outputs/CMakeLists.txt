@@ -19,10 +19,6 @@ else()
 	add_definitions(-DNO_CRYPTO)
 endif()
 
-
-find_package(ZMQ REQUIRED)
-include_directories(${ZMQ_INCLUDE_DIRS})
-
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ftl-sdk/CMakeLists.txt")
 	find_package(Libcurl REQUIRED)
 

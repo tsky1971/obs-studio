@@ -1,5 +1,7 @@
 #pragma once
 
+#define _WINSOCKAPI_    // stops windows.h including winsock.h
+
 #include <obs.hpp>
 #include "qt-display.hpp"
 #include "window-basic-main.hpp"

@@ -7,17 +7,12 @@
 #include "display-helpers.hpp"
 #include "qt-wrappers.hpp"
 #include "platform.hpp"
-
-<<<<<<< HEAD
 #include <algorithm>    // std::max
 
-OBSProjector::OBSProjector(QWidget *widget, obs_source_t *source_)
-=======
 static QList<OBSProjector *> multiviewProjectors;
 static bool updatingMultiview = false;
 
 OBSProjector::OBSProjector(QWidget *widget, obs_source_t *source_, bool window)
->>>>>>> upstream/master
 	: OBSQTDisplay                 (widget,
 	                                Qt::Window),
 	  source                       (source_),
