@@ -232,6 +232,8 @@ void OBSBasic::TransitionToScene(OBSScene scene, bool force, bool direct)
 {
 	obs_source_t *source = obs_scene_get_source(scene);
 	TransitionToScene(source, force, direct);
+	// @digitalesstudio begin
+	// @digitalesstudio end
 }
 
 void OBSBasic::TransitionStopped()
