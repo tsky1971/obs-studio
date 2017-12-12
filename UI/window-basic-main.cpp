@@ -296,6 +296,23 @@ OBSBasic::OBSBasic(QWidget *parent)
 						size(), rect));
 		}
 	}
+
+	// @digitalesstudio begin	
+	mqtt_conn_opts = MQTTClient_connectOptions_initializer;
+	mqtt_pubmsg = MQTTClient_message_initializer;
+
+	int rc;
+
+	MQTTClient_create(&mqtt_client, MQTT_ADDRESS, MQTT_CLIENTID, MQTTCLIENT_PERSISTENCE_NONE, NULL);
+	mqtt_conn_opts.keepAliveInterval = 20;
+	mqtt_conn_opts.cleansession = 1;
+
+	if ((rc = MQTTClient_connect(mqtt_client, &mqtt_conn_opts)) != MQTTCLIENT_SUCCESS) {
+		blog(LOG_INFO, "Failed to connect, return code %d\n", rc);
+		//exit(-1);
+	}
+	blog(LOG_INFO, "MQTT connected\n");
+	// @digitalesstudio end
 }
 
 static void SaveAudioDevice(const char *name, int channel, obs_data_t *parent,

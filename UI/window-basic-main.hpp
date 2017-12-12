@@ -38,6 +38,19 @@
 
 #include <QPointer>
 
+// @digitalesstudio begin
+
+#include "MQTTClient.h"
+
+#define MQTT_ADDRESS     "tcp://localhost:1883"
+#define MQTT_CLIENTID    "obs-studio"
+#define MQTT_TOPIC       "MQTT obs"
+#define MQTT_PAYLOAD     "sceneswitch"
+#define MQTT_QOS         1
+#define MQTT_TIMEOUT     10000L
+
+// @digitalesstudio end
+
 class QMessageBox;
 class QListWidgetItem;
 class VolControl;
@@ -91,6 +104,13 @@ struct QuickTransition {
 
 class OBSBasic : public OBSMainWindow {
 	Q_OBJECT
+
+	// @digitalesstudio begin
+	MQTTClient mqtt_client;
+	MQTTClient_connectOptions mqtt_conn_opts;
+	MQTTClient_message mqtt_pubmsg;
+	MQTTClient_deliveryToken mqtt_token;
+	// @digitalesstudio end
 
 	friend class OBSBasicPreview;
 	friend class OBSBasicStatusBar;

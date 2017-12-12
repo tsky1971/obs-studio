@@ -53,6 +53,11 @@ include_directories(SYSTEM "obs-frontend-api")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/libobs")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/deps/libff")
 
+
+find_package(MQTT)
+include_directories(${MQTT_INCLUDE_DIRS})
+
+
 find_package(Libcurl REQUIRED)
 include_directories(${LIBCURL_INCLUDE_DIRS})
 add_definitions(${LIBCURL_DEFINITIONS})
@@ -267,6 +272,8 @@ target_link_libraries(obs
 	libobs
 	Qt5::Widgets
 	obs-frontend-api
+	${MQTT_LIBA}
+	${MQTT_LIBC}
 	${FFMPEG_LIBRARIES}
 	${LIBCURL_LIBRARIES}
 	${obs_PLATFORM_LIBRARIES})
