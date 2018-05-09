@@ -83,7 +83,9 @@ if(WIN32)
 	set(obs-outputs_PLATFORM_DEPS
 		ws2_32
 		winmm
-		Iphlpapi)
+		Iphlpapi
+		Mswsock
+		Advapi32)
 endif()
 
 if(MSVC)

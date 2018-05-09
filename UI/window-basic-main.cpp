@@ -217,7 +217,6 @@ OBSBasic::OBSBasic(QWidget *parent)
 	}
 	// @tsky end
 
-	DeleteKeys =
 #ifdef __APPLE__
 	ui->actionRemoveSource->setShortcuts({Qt::Key_Backspace});
 	ui->actionRemoveScene->setShortcuts({Qt::Key_Backspace});

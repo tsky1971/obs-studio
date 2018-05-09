@@ -1,13 +1,16 @@
+
 #include <graphics/math-defs.h>
 #include <util/platform.h>
 #include <util/util.hpp>
 #include <obs-module.h>
 #include <sys/stat.h>
 #include <windows.h>
-#include <gdiplus.h>
+#include <Unknwn.h>
 #include <algorithm>
+#include <gdiplus.h>
 #include <string>
 #include <memory>
+#include <minmax.h>
 
 using namespace std;
 using namespace Gdiplus;

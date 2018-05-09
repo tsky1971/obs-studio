@@ -1,6 +1,8 @@
 #ifdef _WIN32
 #include "rtmp-stream.h"
+#include <Ws2ipdef.h>
 #include <winsock2.h>
+//#include <Mstcpip.h>
 
 static void fatal_sock_shutdown(struct rtmp_stream *stream)
 {
@@ -95,11 +97,11 @@ static void ideal_send_backlog_event(struct rtmp_stream *stream,
 		bool *can_write)
 {
 	ULONG ideal_send_backlog;
-	int ret;
+	int ret = 0;
 
-	ret = idealsendbacklogquery(
+	/*ret = idealsendbacklogquery(
 			stream->rtmp.m_sb.sb_socket,
-			&ideal_send_backlog);
+			&ideal_send_backlog);*/
 	if (ret == 0) {
 		int cur_tcp_bufsize;
 		int size = sizeof(cur_tcp_bufsize);
@@ -267,8 +269,8 @@ static inline void socket_thread_windows_internal(struct rtmp_stream *stream)
 		memset(&send_backlog_overlapped, 0,
 				sizeof(send_backlog_overlapped));
 		send_backlog_overlapped.hEvent = send_backlog_event;
-		idealsendbacklognotify(stream->rtmp.m_sb.sb_socket,
-				&send_backlog_overlapped, NULL);
+		/*idealsendbacklognotify(stream->rtmp.m_sb.sb_socket,
+				&send_backlog_overlapped, NULL);*/
 	} else {
 		blog(LOG_INFO, "socket_thread_windows: Send window "
 				"optimization disabled by user.");
@@ -311,8 +313,8 @@ static inline void socket_thread_windows_internal(struct rtmp_stream *stream)
 			ideal_send_backlog_event(stream, &can_write);
 
 			ResetEvent(send_backlog_event);
-			idealsendbacklognotify(stream->rtmp.m_sb.sb_socket,
-					&send_backlog_overlapped, NULL);
+			/*idealsendbacklognotify(stream->rtmp.m_sb.sb_socket,
+					&send_backlog_overlapped, NULL);*/
 			continue;
 		}
 

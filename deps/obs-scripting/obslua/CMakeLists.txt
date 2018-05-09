@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 2.8)
 project(obslua)
 
+find_package(ZMQ REQUIRED)
+include_directories(${ZMQ_INCLUDE_DIRS})
+
 find_package(SWIG 2 REQUIRED)
 include(${SWIG_USE_FILE})
 
