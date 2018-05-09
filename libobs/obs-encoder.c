@@ -189,8 +189,7 @@ static void add_connection(struct obs_encoder *encoder)
 		struct video_scale_info info = {0};
 		get_video_info(encoder, &info);
 
-		video_output_connect(encoder->media, &info, receive_video,
-			encoder);
+		start_raw_video(encoder->media, &info, receive_video, encoder);
 	}
 
 	set_encoder_active(encoder, true);
@@ -202,8 +201,7 @@ static void remove_connection(struct obs_encoder *encoder)
 		audio_output_disconnect(encoder->media, encoder->mixer_idx,
 				receive_audio, encoder);
 	else
-		video_output_disconnect(encoder->media, receive_video,
-				encoder);
+		stop_raw_video(encoder->media, receive_video, encoder);
 
 	obs_encoder_shutdown(encoder);
 	set_encoder_active(encoder, false);
@@ -611,7 +609,7 @@ uint32_t obs_encoder_get_height(const obs_encoder_t *encoder)
 	if (!encoder->media)
 		return 0;
 
-	return encoder->scaled_width != 0 ?
+	return encoder->scaled_height != 0 ?
 		encoder->scaled_height :
 		video_output_get_height(encoder->media);
 }
@@ -796,7 +794,7 @@ static inline void do_encode(struct obs_encoder *encoder,
 		full_stop(encoder);
 		blog(LOG_ERROR, "Error encoding with encoder '%s'",
 				encoder->context.name);
-		return;
+		goto error;
 	}
 
 	if (received) {
@@ -822,6 +820,7 @@ static inline void do_encode(struct obs_encoder *encoder,
 		pthread_mutex_unlock(&encoder->callbacks_mutex);
 	}
 
+error:
 	profile_end(do_encode_name);
 }
 
@@ -951,7 +950,6 @@ static bool buffer_audio(struct obs_encoder *encoder, struct audio_data *data)
 		/* use currently buffered audio instead */
 		if (v_start_ts < data->timestamp) {
 			start_from_buffer(encoder, v_start_ts);
-			goto skip_push;
 		}
 
 	} else if (!encoder->start_ts && !encoder->paired_encoder) {
@@ -961,7 +959,6 @@ static bool buffer_audio(struct obs_encoder *encoder, struct audio_data *data)
 fail:
 	push_back_audio(encoder, data, size, offset_size);
 
-skip_push:
 	profile_end(buffer_audio_name);
 	return success;
 }
@@ -1034,17 +1031,55 @@ void obs_encoder_remove_output(struct obs_encoder *encoder,
 	pthread_mutex_unlock(&encoder->outputs_mutex);
 }
 
+void obs_encoder_packet_create_instance(struct encoder_packet *dst,
+		const struct encoder_packet *src)
+{
+	long *p_refs;
+
+	*dst = *src;
+	p_refs = bmalloc(src->size + sizeof(long));
+	dst->data = (void*)(p_refs + 1);
+	*p_refs = 1;
+	memcpy(dst->data, src->data, src->size);
+}
+
 void obs_duplicate_encoder_packet(struct encoder_packet *dst,
 		const struct encoder_packet *src)
 {
-	*dst = *src;
-	dst->data = bmemdup(src->data, src->size);
+	obs_encoder_packet_create_instance(dst, src);
 }
 
 void obs_free_encoder_packet(struct encoder_packet *packet)
 {
-	bfree(packet->data);
-	memset(packet, 0, sizeof(struct encoder_packet));
+	obs_encoder_packet_release(packet);
+}
+
+void obs_encoder_packet_ref(struct encoder_packet *dst,
+		struct encoder_packet *src)
+{
+	if (!src)
+		return;
+
+	if (src->data) {
+		long *p_refs = ((long*)src->data) - 1;
+		os_atomic_inc_long(p_refs);
+	}
+
+	*dst = *src;
+}
+
+void obs_encoder_packet_release(struct encoder_packet *pkt)
+{
+	if (!pkt)
+		return;
+
+	if (pkt->data) {
+		long *p_refs = ((long*)pkt->data) - 1;
+		if (os_atomic_dec_long(p_refs) == 0)
+			bfree(p_refs);
+	}
+
+	memset(pkt, 0, sizeof(struct encoder_packet));
 }
 
 void obs_encoder_set_preferred_video_format(obs_encoder_t *encoder,

@@ -59,6 +59,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <util/darray.h>
 #include <util/platform.h>
 #include <obs-module.h>
+#include <obs-avc.h>
 
 #ifndef _STDINT_H_INCLUDED
 #define _STDINT_H_INCLUDED
@@ -292,6 +293,9 @@ static void update_params(struct obs_qsv *obsqsv, obs_data_t *settings)
 	bool cbr_override = obs_data_get_bool(settings, "cbr");
 	int bFrames = 7;
 
+	if (obs_data_has_user_value(settings, "bf"))
+		bFrames = (int)obs_data_get_int(settings, "bf");
+
 	int width = (int)obs_encoder_get_width(obsqsv->encoder);
 	int height = (int)obs_encoder_get_height(obsqsv->encoder);
 	if (astrcmpi(target_usage, "quality") == 0)
@@ -407,7 +411,7 @@ static bool update_settings(struct obs_qsv *obsqsv, obs_data_t *settings)
 static void load_headers(struct obs_qsv *obsqsv)
 {
 	DARRAY(uint8_t) header;
-	uint8_t sei = 0;
+	static uint8_t sei = 0;
 
 	// Not sure if SEI is needed.
 	// Just filling in empty meaningless SEI message.
@@ -579,6 +583,9 @@ static void obs_qsv_video_info(void *data, struct video_scale_info *info)
 
 static void parse_packet(struct obs_qsv *obsqsv, struct encoder_packet *packet, mfxBitstream *pBS, uint32_t fps_num, bool *received_packet)
 {
+	uint8_t *start, *end;
+	int type;
+
 	if (pBS == NULL || pBS->DataLength == 0) {
 		*received_packet = false;
 		return;
@@ -595,13 +602,43 @@ static void parse_packet(struct obs_qsv *obsqsv, struct encoder_packet *packet, 
 	packet->keyframe = (pBS->FrameType &
 			(MFX_FRAMETYPE_I | MFX_FRAMETYPE_REF));
 
+	/* ------------------------------------ */
+
+	start = obsqsv->packet_data.array;
+	end = start + obsqsv->packet_data.num;
+
+	start = (uint8_t*)obs_avc_find_startcode(start, end);
+	while (true) {
+		while (start < end && !*(start++));
+
+		if (start == end)
+			break;
+
+		type = start[0] & 0x1F;
+		if (type == OBS_NAL_SLICE_IDR || type == OBS_NAL_SLICE) {
+			uint8_t prev_type = (start[0] >> 5) & 0x3;
+			start[0] &= ~(3 << 5);
+
+			if (pBS->FrameType & MFX_FRAMETYPE_I)
+				start[0] |= OBS_NAL_PRIORITY_HIGHEST << 5;
+			else if (pBS->FrameType & MFX_FRAMETYPE_P)
+				start[0] |= OBS_NAL_PRIORITY_HIGH << 5;
+			else
+				start[0] |= prev_type << 5;
+		}
+
+		start = (uint8_t*)obs_avc_find_startcode(start, end);
+	}
+
+	/* ------------------------------------ */
+
 	//bool iFrame = pBS->FrameType & MFX_FRAMETYPE_I;
 	//bool bFrame = pBS->FrameType & MFX_FRAMETYPE_B;
 	bool pFrame = pBS->FrameType & MFX_FRAMETYPE_P;
 	//int iType = iFrame ? 0 : (bFrame ? 1 : (pFrame ? 2 : -1));
 	//int64_t interval = obsqsv->params.nbFrames + 1;
 
-	// In case MSDK does't support automatic DecodeTimeStamp, do manual
+	// In case MSDK doesn't support automatic DecodeTimeStamp, do manual
 	// calculation
 	if (g_pts2dtsShift >= 0)
 	{
@@ -652,6 +689,8 @@ static bool obs_qsv_encode(void *data, struct encoder_frame *frame,
 
 	mfxU64 qsvPTS = frame->pts * 90000 / voi->fps_num;
 
+	// FIXME: remove null check from the top of this function
+	// if we actually do expect null frames to complete output.
 	if (frame)
 		ret = qsv_encoder_encode(
 			obsqsv->context,
@@ -667,6 +706,7 @@ static bool obs_qsv_encode(void *data, struct encoder_frame *frame,
 
 	if (ret < 0) {
 		warn("encode failed");
+		LeaveCriticalSection(&g_QsvCs);
 		return false;
 	}
 

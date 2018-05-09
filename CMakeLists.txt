@@ -2,7 +2,26 @@ cmake_minimum_required(VERSION 2.8.12)
 
 project(obs-studio)
 
+option(BUILD_CAPTIONS "Build captions" FALSE)
+
+if(WIN32)
+	if (QTDIR OR DEFINED ENV{QTDIR} OR DEFINED ENV{QTDIR32} OR DEFINED ENV{QTDIR64})
+		# Qt path set by user or env var
+	else()
+		set(QTDIR "" CACHE PATH "Path to Qt (e.g. C:/Qt/5.7/msvc2015_64)")
+		message(WARNING "QTDIR variable is missing.  Please set this variable to specify path to Qt (e.g. C:/Qt/5.7/msvc2015_64)")
+	endif()
+	if (DepsPath OR DEFINED ENV{DepsPath} OR DEFINED ENV{DepsPath32} OR DEFINED ENV{DepsPath64})
+		# Dependencies path set by user or env var
+	else()
+		set(DepsPath "" CACHE PATH "Path to compiled dependencies (e.g. D:/dependencies/win64)")
+		message(WARNING "DepsPath variable is missing.  Please set this variable to specify path to compiled dependencies (e.g. D:/dependencies/win64)")
+	endif()
+endif()
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+set(ENABLE_SCRIPTING TRUE CACHE BOOL "Enables scripting")
+set(SCRIPTING_ENABLED OFF CACHE BOOL "Interal global cmake variable" FORCE)
 
 include(ObsHelpers)
 include(ObsCpack)
@@ -35,9 +54,9 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX OR CMAKE_COMPILER_IS_CLAN
 	endif()
 elseif(MSVC)
 	if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
-		string(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /D_TIMESPEC_DEFINED")
+		string(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 	else()
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /D_TIMESPEC_DEFINED")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
 	endif()
 
 	# Disable pointless constant condition warnings
@@ -86,8 +105,14 @@ option(BUILD_TESTS "Build test directory (includes test sources and possibly a p
 mark_as_advanced(BUILD_TESTS)
 
 if(NOT INSTALLER_RUN)
-	add_subdirectory(deps)
+	option(ENABLE_UI "Enables the OBS user interfaces" ON)
+	if(DISABLE_UI OR NOT ENABLE_UI)
+		set(UI_ENABLED FALSE)
+	else()
+		set(UI_ENABLED TRUE)
+	endif()
 
+	add_subdirectory(deps)
 
 	if(WIN32)
 		add_subdirectory(libobs-d3d11)
@@ -95,7 +120,7 @@ if(NOT INSTALLER_RUN)
 
 	add_subdirectory(libobs-opengl)
 	add_subdirectory(libobs)
-	add_subdirectory(obs)
+	add_subdirectory(UI)
 	add_subdirectory(plugins)
 	if (BUILD_TESTS)
 		add_subdirectory(test)

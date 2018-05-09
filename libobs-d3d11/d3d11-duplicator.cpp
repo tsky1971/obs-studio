@@ -16,24 +16,14 @@
 ******************************************************************************/
 
 #include "d3d11-subsystem.hpp"
+#include <map>
 
 static inline bool get_monitor(gs_device_t *device, int monitor_idx,
 		IDXGIOutput **dxgiOutput)
 {
-	ComPtr<IDXGIAdapter> dxgiAdapter;
-	ComPtr<IDXGIDevice> dxgiDevice;
 	HRESULT hr;
 
-	hr = device->device->QueryInterface(__uuidof(IDXGIDevice),
-			(void**)dxgiDevice.Assign());
-	if (FAILED(hr))
-		throw HRError("Failed to query IDXGIDevice", hr);
-
-	hr = dxgiDevice->GetAdapter(dxgiAdapter.Assign());
-	if (FAILED(hr))
-		throw HRError("Failed to get adapter", hr);
-
-	hr = dxgiAdapter->EnumOutputs(monitor_idx, dxgiOutput);
+	hr = device->adapter->EnumOutputs(monitor_idx, dxgiOutput);
 	if (FAILED(hr)) {
 		if (hr == DXGI_ERROR_NOT_FOUND)
 			return false;
@@ -44,14 +34,13 @@ static inline bool get_monitor(gs_device_t *device, int monitor_idx,
 	return true;
 }
 
-gs_duplicator::gs_duplicator(gs_device_t *device_, int monitor_idx)
-	: texture(nullptr), device(device_)
+void gs_duplicator::Start()
 {
 	ComPtr<IDXGIOutput1> output1;
 	ComPtr<IDXGIOutput> output;
 	HRESULT hr;
 
-	if (!get_monitor(device, monitor_idx, output.Assign()))
+	if (!get_monitor(device, idx, output.Assign()))
 		throw "Invalid monitor index";
 
 	hr = output->QueryInterface(__uuidof(IDXGIOutput1),
@@ -62,6 +51,16 @@ gs_duplicator::gs_duplicator(gs_device_t *device_, int monitor_idx)
 	hr = output1->DuplicateOutput(device->device, duplicator.Assign());
 	if (FAILED(hr))
 		throw HRError("Failed to duplicate output", hr);
+}
+
+gs_duplicator::gs_duplicator(gs_device_t *device_, int monitor_idx)
+	: gs_obj  (device_, gs_type::gs_duplicator),
+	  texture (nullptr),
+	  idx     (monitor_idx),
+	  refs    (1),
+	  updated (false)
+{
+	Start();
 }
 
 gs_duplicator::~gs_duplicator()
@@ -120,13 +119,30 @@ EXPORT bool device_get_duplicator_monitor_info(gs_device_t *device,
 	return true;
 }
 
+static std::map<int, gs_duplicator*> instances;
+
+void reset_duplicators(void)
+{
+	for (auto &pair : instances) {
+		pair.second->updated = false;
+	}
+}
+
 EXPORT gs_duplicator_t *device_duplicator_create(gs_device_t *device,
 		int monitor_idx)
 {
 	gs_duplicator *duplicator = nullptr;
 
+	auto it = instances.find(monitor_idx);
+	if (it != instances.end()) {
+		duplicator = it->second;
+		duplicator->refs++;
+		return duplicator;
+	}
+
 	try {
 		duplicator = new gs_duplicator(device, monitor_idx);
+		instances[monitor_idx] = duplicator;
 
 	} catch (const char *error) {
 		blog(LOG_DEBUG, "device_duplicator_create: %s",
@@ -144,7 +160,10 @@ EXPORT gs_duplicator_t *device_duplicator_create(gs_device_t *device,
 
 EXPORT void gs_duplicator_destroy(gs_duplicator_t *duplicator)
 {
-	delete duplicator;
+	if (--duplicator->refs == 0) {
+		instances.erase(duplicator->idx);
+		delete duplicator;
+	}
 }
 
 static inline void copy_texture(gs_duplicator_t *d, ID3D11Texture2D *tex)
@@ -175,6 +194,13 @@ EXPORT bool gs_duplicator_update_frame(gs_duplicator_t *d)
 	ComPtr<IDXGIResource> res;
 	HRESULT hr;
 
+	if (!d->duplicator) {
+		return false;
+	}
+	if (d->updated) {
+		return true;
+	}
+
 	hr = d->duplicator->AcquireNextFrame(0, &info, res.Assign());
 	if (hr == DXGI_ERROR_ACCESS_LOST) {
 		return false;
@@ -199,6 +225,7 @@ EXPORT bool gs_duplicator_update_frame(gs_duplicator_t *d)
 
 	copy_texture(d, tex);
 	d->duplicator->ReleaseFrame();
+	d->updated = true;
 	return true;
 }
 

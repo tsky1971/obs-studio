@@ -118,6 +118,7 @@ public:
 	inline ~Decoder() {ffmpeg_decode_free(&decode);}
 
 	inline operator ffmpeg_decode*() {return &decode;}
+	inline ffmpeg_decode *operator->() {return &decode;}
 };
 
 class CriticalSection {
@@ -151,6 +152,7 @@ public:
 enum class Action {
 	None,
 	Activate,
+	ActivateBlock,
 	Deactivate,
 	Shutdown,
 	ConfigVideo,
@@ -166,6 +168,7 @@ struct DShowInput {
 	Device       device;
 	bool         deactivateWhenNotShowing = false;
 	bool         deviceHasAudio = false;
+	bool         deviceHasSeparateAudioFilter = false;
 	bool         flip = false;
 	bool         active = false;
 
@@ -179,6 +182,7 @@ struct DShowInput {
 	obs_source_audio audio;
 
 	WinHandle semaphore;
+	WinHandle activated_event;
 	WinHandle thread;
 	CriticalSection mutex;
 	vector<Action> actions;
@@ -188,6 +192,16 @@ struct DShowInput {
 		CriticalScope scope(mutex);
 		actions.push_back(action);
 		ReleaseSemaphore(semaphore, 1, nullptr);
+	}
+
+	inline void QueueActivate(obs_data_t *settings)
+	{
+		bool block = obs_data_get_bool(settings, "synchronous_activate");
+		QueueAction(block ? Action::ActivateBlock : Action::Activate);
+		if (block) {
+			obs_data_erase(settings, "synchronous_activate");
+			WaitForSingleObject(activated_event, INFINITE);
+		}
 	}
 
 	inline DShowInput(obs_source_t *source_, obs_data_t *settings)
@@ -204,13 +218,23 @@ struct DShowInput {
 		if (!semaphore)
 			throw "Failed to create semaphore";
 
+		activated_event = CreateEvent(nullptr, false, false, nullptr);
+		if (!activated_event)
+			throw "Failed to create activated_event";
+
 		thread = CreateThread(nullptr, 0, DShowThread, this, 0,
 				nullptr);
 		if (!thread)
 			throw "Failed to create thread";
 
+		deactivateWhenNotShowing =
+			obs_data_get_bool(settings, DEACTIVATE_WNS);
+
 		if (obs_data_get_bool(settings, "active")) {
-			QueueAction(Action::Activate);
+			bool showing = obs_source_showing(source);
+			if (!deactivateWhenNotShowing || showing)
+				QueueActivate(settings);
+
 			active = true;
 		}
 	}
@@ -298,13 +322,18 @@ void DShowInput::DShowLoop()
 
 		switch (action) {
 		case Action::Activate:
+		case Action::ActivateBlock:
 			{
+				bool block = action == Action::ActivateBlock;
+
 				obs_data_t *settings;
 				settings = obs_source_get_settings(source);
 				if (!Activate(settings)) {
 					obs_source_output_video(source,
 							nullptr);
 				}
+				if (block)
+					SetEvent(activated_event);
 				obs_data_release(settings);
 				break;
 			}
@@ -398,6 +427,21 @@ static inline audio_format ConvertAudioFormat(AudioFormat format)
 	}
 }
 
+static inline enum speaker_layout convert_speaker_layout(uint8_t channels)
+{
+	switch (channels) {
+	case 0:     return SPEAKERS_UNKNOWN;
+	case 1:     return SPEAKERS_MONO;
+	case 2:     return SPEAKERS_STEREO;
+	case 3:     return SPEAKERS_2POINT1;
+	case 4:     return SPEAKERS_4POINT0;
+	case 5:     return SPEAKERS_4POINT1;
+	case 6:     return SPEAKERS_5POINT1;
+	case 8:     return SPEAKERS_7POINT1;
+	default:    return SPEAKERS_UNKNOWN;
+	}
+}
+
 //#define LOG_ENCODED_VIDEO_TS 1
 //#define LOG_ENCODED_AUDIO_TS 1
 
@@ -412,9 +456,9 @@ void DShowInput::OnEncodedVideoData(enum AVCodecID id,
 	}
 
 	bool got_output;
-	int len = ffmpeg_decode_video(video_decoder, data, size, &ts,
+	bool success = ffmpeg_decode_video(video_decoder, data, size, &ts,
 			&frame, &got_output);
-	if (len < 0) {
+	if (!success) {
 		blog(LOG_WARNING, "Error decoding video");
 		return;
 	}
@@ -511,21 +555,30 @@ void DShowInput::OnEncodedAudioData(enum AVCodecID id,
 		}
 	}
 
-	bool got_output;
-	int len = ffmpeg_decode_audio(audio_decoder, data, size,
-			&audio, &got_output);
-	if (len < 0) {
-		blog(LOG_WARNING, "Error decoding audio");
-		return;
-	}
+	bool got_output = false;
+	do {
+		bool success = ffmpeg_decode_audio(audio_decoder, data, size,
+				&audio, &got_output);
+		if (!success) {
+			blog(LOG_WARNING, "Error decoding audio");
+			return;
+		}
 
-	if (got_output) {
-		audio.timestamp = (uint64_t)ts * 100;
+		if (got_output) {
+			audio.timestamp = (uint64_t)ts * 100;
 #if LOG_ENCODED_AUDIO_TS
-		blog(LOG_DEBUG, "audio ts: %llu", audio.timestamp);
+			blog(LOG_DEBUG, "audio ts: %llu", audio.timestamp);
 #endif
-		obs_source_output_audio(source, &audio);
-	}
+			obs_source_output_audio(source, &audio);
+		} else {
+			break;
+		}
+
+		ts += int64_t(audio_decoder->frame->nb_samples) * 10000000LL /
+			int64_t(audio_decoder->frame->sample_rate);
+		size = 0;
+		data = nullptr;
+	} while (got_output);
 }
 
 void DShowInput::OnAudioData(const AudioConfig &config,
@@ -545,7 +598,7 @@ void DShowInput::OnAudioData(const AudioConfig &config,
 		return;
 	}
 
-	audio.speakers        = (enum speaker_layout)config.channels;
+	audio.speakers        = convert_speaker_layout((uint8_t)config.channels);
 	audio.format          = ConvertAudioFormat(config.format);
 	audio.samples_per_sec = (uint32_t)config.sampleRate;
 	audio.data[0]         = data;
@@ -729,7 +782,6 @@ static inline bool IsEncoded(const VideoConfig &config)
 inline void DShowInput::SetupBuffering(obs_data_t *settings)
 {
 	BufferingType bufType;
-	uint32_t flags = obs_source_get_flags(source);
 	bool useBuffering;
 
 	bufType = (BufferingType)obs_data_get_int(settings, BUFFERING_VAL);
@@ -739,12 +791,7 @@ inline void DShowInput::SetupBuffering(obs_data_t *settings)
 	else
 		useBuffering = bufType == BufferingType::On;
 
-	if (useBuffering)
-		flags &= ~OBS_SOURCE_FLAG_UNBUFFERED;
-	else
-		flags |= OBS_SOURCE_FLAG_UNBUFFERED;
-
-	obs_source_set_flags(source, flags);
+	obs_source_set_async_unbuffered(source, !useBuffering);
 }
 
 static DStr GetVideoFormatName(VideoFormat format);
@@ -821,6 +868,7 @@ bool DShowInput::UpdateVideoConfig(obs_data_t *settings)
 	videoConfig.internalFormat   = format;
 
 	deviceHasAudio = dev.audioAttached;
+	deviceHasSeparateAudioFilter = dev.separateAudioFilter;
 
 	videoConfig.callback = std::bind(&DShowInput::OnVideoData, this,
 			placeholders::_1, placeholders::_2,
@@ -838,6 +886,8 @@ bool DShowInput::UpdateVideoConfig(obs_data_t *settings)
 
 	if (videoConfig.internalFormat == VideoFormat::MJPEG) {
 		videoConfig.format = VideoFormat::XRGB;
+		videoConfig.useDefaultConfig = false;
+
 		if (!device.SetVideoConfig(&videoConfig)) {
 			blog(LOG_WARNING, "%s: device.SetVideoConfig (XRGB) "
 					"failed", obs_source_get_name(source));
@@ -895,7 +945,8 @@ bool DShowInput::UpdateAudioConfig(obs_data_t *settings)
 		return true;
 	}
 
-	audioConfig.useVideoDevice = !useCustomAudio;
+	audioConfig.useVideoDevice = !useCustomAudio && !deviceHasSeparateAudioFilter;
+	audioConfig.useSeparateAudioFilter = deviceHasSeparateAudioFilter;
 
 	audioConfig.callback = std::bind(&DShowInput::OnAudioData, this,
 			placeholders::_1, placeholders::_2,
@@ -916,8 +967,12 @@ bool DShowInput::UpdateAudioConfig(obs_data_t *settings)
 	blog(LOG_INFO, "\tusing video device audio: %s",
 			audioConfig.useVideoDevice ? "yes" : "no");
 
-	if (!audioConfig.useVideoDevice)
-		blog(LOG_INFO, "\taudio device: %s", (const char*)name_utf8);
+	if (!audioConfig.useVideoDevice) {
+		if (audioConfig.useSeparateAudioFilter)
+			blog(LOG_INFO, "\tseparate audio filter");
+		else
+			blog(LOG_INFO, "\taudio device: %s", (const char*)name_utf8);
+	}
 
 	const char *mode = "";
 
@@ -1043,9 +1098,7 @@ static void UpdateDShowInput(void *data, obs_data_t *settings)
 {
 	DShowInput *input = reinterpret_cast<DShowInput*>(data);
 	if (input->active)
-		input->QueueAction(Action::Activate);
-
-	UNUSED_PARAMETER(settings);
+		input->QueueActivate(settings);
 }
 
 static void GetDShowDefaults(obs_data_t *settings)
@@ -1795,6 +1848,9 @@ static obs_properties_t *GetDShowProperties(void *obj)
 			(int64_t)BufferingType::On);
 	obs_property_list_add_int(p, TEXT_BUFFERING_OFF,
 			(int64_t)BufferingType::Off);
+
+	obs_property_set_long_description(p,
+			obs_module_text("Buffering.ToolTip"));
 
 	obs_properties_add_bool(ppts, FLIP_IMAGE, TEXT_FLIP_IMAGE);
 

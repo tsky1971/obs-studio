@@ -20,6 +20,11 @@
 #include "obs.h"
 #include "obs-internal.h"
 
+#if BUILD_CAPTIONS
+#include <caption/caption.h>
+#include <caption/avc.h>
+#endif
+
 static inline bool active(const struct obs_output *output)
 {
 	return os_atomic_load_bool(&output->active);
@@ -99,10 +104,13 @@ obs_output_t *obs_output_create(const char *id, const char *name,
 	output = bzalloc(sizeof(struct obs_output));
 	pthread_mutex_init_value(&output->interleaved_mutex);
 	pthread_mutex_init_value(&output->delay_mutex);
+	pthread_mutex_init_value(&output->caption_mutex);
 
 	if (pthread_mutex_init(&output->interleaved_mutex, NULL) != 0)
 		goto fail;
 	if (pthread_mutex_init(&output->delay_mutex, NULL) != 0)
+		goto fail;
+	if (pthread_mutex_init(&output->caption_mutex, NULL) != 0)
 		goto fail;
 	if (os_event_init(&output->stopping_event, OS_EVENT_TYPE_MANUAL) != 0)
 		goto fail;
@@ -129,12 +137,6 @@ obs_output_t *obs_output_create(const char *id, const char *name,
 	if (ret < 0)
 		goto fail;
 
-	if (info)
-		output->context.data = info->create(output->context.settings,
-				output);
-	if (!output->context.data)
-		blog(LOG_ERROR, "Failed to create output '%s'!", name);
-
 	output->reconnect_retry_sec = 2;
 	output->reconnect_retry_max = 20;
 	output->valid               = true;
@@ -145,6 +147,12 @@ obs_output_t *obs_output_create(const char *id, const char *name,
 	obs_context_data_insert(&output->context,
 			&obs->data.outputs_mutex,
 			&obs->data.first_output);
+
+	if (info)
+		output->context.data = info->create(output->context.settings,
+				output);
+	if (!output->context.data)
+		blog(LOG_ERROR, "Failed to create output '%s'!", name);
 
 	blog(LOG_DEBUG, "output '%s' (%s) created", name, id);
 	return output;
@@ -157,7 +165,7 @@ fail:
 static inline void free_packets(struct obs_output *output)
 {
 	for (size_t i = 0; i < output->interleaved_packets.num; i++)
-		obs_free_encoder_packet(output->interleaved_packets.array+i);
+		obs_encoder_packet_release(output->interleaved_packets.array+i);
 	da_free(output->interleaved_packets);
 }
 
@@ -196,6 +204,7 @@ void obs_output_destroy(obs_output_t *output)
 		}
 
 		os_event_destroy(output->stopping_event);
+		pthread_mutex_destroy(&output->caption_mutex);
 		pthread_mutex_destroy(&output->interleaved_mutex);
 		pthread_mutex_destroy(&output->delay_mutex);
 		os_event_destroy(output->reconnect_stop_event);
@@ -203,6 +212,8 @@ void obs_output_destroy(obs_output_t *output)
 		circlebuf_free(&output->delay_data);
 		if (output->owns_info_id)
 			bfree((void*)output->info.id);
+		if (output->last_error_message)
+			bfree(output->last_error_message);
 		bfree(output);
 	}
 }
@@ -219,6 +230,10 @@ bool obs_output_actual_start(obs_output_t *output)
 
 	os_event_wait(output->stopping_event);
 	output->stop_code = 0;
+	if (output->last_error_message) {
+		bfree(output->last_error_message);
+		output->last_error_message = NULL;
+	}
 
 	if (output->context.data)
 		success = output->info.start(output->context.data);
@@ -226,8 +241,6 @@ bool obs_output_actual_start(obs_output_t *output)
 	if (success && output->video) {
 		output->starting_frame_count =
 			video_output_get_total_frames(output->video);
-		output->starting_skipped_frame_count =
-			video_output_get_skipped_frames(output->video);
 		output->starting_drawn_count = obs->video.total_frames;
 		output->starting_lagged_count = obs->video.lagged_frames;
 	}
@@ -235,6 +248,7 @@ bool obs_output_actual_start(obs_output_t *output)
 	if (os_atomic_load_long(&output->delay_restart_refs))
 		os_atomic_dec_long(&output->delay_restart_refs);
 
+	output->caption_timestamp = 0;
 	return success;
 }
 
@@ -269,39 +283,37 @@ static void log_frame_info(struct obs_output *output)
 {
 	struct obs_core_video *video = &obs->video;
 
-	uint32_t video_frames  = video_output_get_total_frames(output->video);
-	uint32_t video_skipped = video_output_get_skipped_frames(output->video);
-
-	uint32_t total   = video_frames  - output->starting_frame_count;
-	uint32_t skipped = video_skipped - output->starting_skipped_frame_count;
-
 	uint32_t drawn  = video->total_frames - output->starting_drawn_count;
 	uint32_t lagged = video->lagged_frames - output->starting_lagged_count;
 
 	int dropped = obs_output_get_frames_dropped(output);
+	int total = output->total_frames;
 
-	double percentage_skipped = 0.0f;
 	double percentage_lagged = 0.0f;
 	double percentage_dropped = 0.0f;
 
-	if (total) {
-		percentage_skipped = (double)skipped / (double)total * 100.0;
-		percentage_dropped = (double)dropped / (double)total * 100.0;
-	}
 	if (drawn)
 		percentage_lagged = (double)lagged  / (double)drawn * 100.0;
+	if (dropped)
+		percentage_dropped = (double)dropped / (double)total * 100.0;
 
 	blog(LOG_INFO, "Output '%s': stopping", output->context.name);
-	blog(LOG_INFO, "Output '%s': Total encoded frames: %"PRIu32,
-			output->context.name, total);
-	blog(LOG_INFO, "Output '%s': Total drawn frames: %"PRIu32,
-			output->context.name, drawn);
+	if (!dropped || !total)
+		blog(LOG_INFO, "Output '%s': Total frames output: %d",
+				output->context.name, total);
+	else
+		blog(LOG_INFO, "Output '%s': Total frames output: %d"
+				" (%d attempted)",
+				output->context.name, total - dropped, total);
 
-	if (total && skipped)
-		blog(LOG_INFO, "Output '%s': Number of skipped frames due "
-				"to encoding lag: %"PRIu32" (%0.1f%%)",
-				output->context.name,
-				skipped, percentage_skipped);
+	if (!lagged || !drawn)
+		blog(LOG_INFO, "Output '%s': Total drawn frames: %"PRIu32,
+				output->context.name, drawn);
+	else
+		blog(LOG_INFO, "Output '%s': Total drawn frames: %"PRIu32
+				" (%"PRIu32" attempted)",
+				output->context.name, drawn - lagged, drawn);
+
 	if (drawn && lagged)
 		blog(LOG_INFO, "Output '%s': Number of lagged frames due "
 				"to rendering lag/stalls: %"PRIu32" (%0.1f%%)",
@@ -322,7 +334,7 @@ void obs_output_actual_stop(obs_output_t *output, bool force, uint64_t ts)
 	bool call_stop = true;
 	bool was_reconnecting = false;
 
-	if (stopping(output))
+	if (stopping(output) && !force)
 		return;
 	os_event_reset(output->stopping_event);
 
@@ -342,10 +354,10 @@ void obs_output_actual_stop(obs_output_t *output, bool force, uint64_t ts)
 			obs_output_end_data_capture(output);
 			os_event_signal(output->stopping_event);
 		} else {
-			call_stop = data_active(output);
+			call_stop = true;
 		}
 	} else {
-		call_stop = data_active(output);
+		call_stop = true;
 	}
 
 	if (output->context.data && call_stop) {
@@ -355,6 +367,12 @@ void obs_output_actual_stop(obs_output_t *output, bool force, uint64_t ts)
 		output->stop_code = OBS_OUTPUT_SUCCESS;
 		signal_stop(output);
 		os_event_signal(output->stopping_event);
+	}
+
+	while (output->caption_head) {
+		output->caption_tail = output->caption_head->next;
+		bfree(output->caption_head);
+		output->caption_head = output->caption_tail;
 	}
 }
 
@@ -391,14 +409,26 @@ void obs_output_force_stop(obs_output_t *output)
 	if (!stopping(output)) {
 		output->stop_code = 0;
 		do_output_signal(output, "stopping");
-		obs_output_actual_stop(output, true, 0);
 	}
+	obs_output_actual_stop(output, true, 0);
 }
 
 bool obs_output_active(const obs_output_t *output)
 {
 	return (output != NULL) ?
 		(active(output) || reconnecting(output)) : false;
+}
+
+uint32_t obs_output_get_flags(const obs_output_t *output)
+{
+	return obs_output_valid(output, "obs_output_get_flags") ?
+		output->info.flags : 0;
+}
+
+uint32_t obs_get_output_flags(const char *id)
+{
+	const struct obs_output_info *info = find_output(id);
+	return info ? info->flags : 0;
 }
 
 static inline obs_data_t *get_defaults(const struct obs_output_info *info)
@@ -942,22 +972,97 @@ static inline bool has_higher_opposing_ts(struct obs_output *output,
 		return output->highest_video_ts > packet->dts_usec;
 }
 
+#if BUILD_CAPTIONS
+static const uint8_t nal_start[4] = {0, 0, 0, 1};
+
+static bool add_caption(struct obs_output *output, struct encoder_packet *out)
+{
+	struct encoder_packet backup = *out;
+	caption_frame_t cf;
+	sei_t sei;
+	uint8_t *data;
+	size_t size;
+	long ref = 1;
+
+	DARRAY(uint8_t) out_data;
+
+	if (out->priority > 1)
+		return false;
+
+	sei_init(&sei);
+
+	da_init(out_data);
+	da_push_back_array(out_data, &ref, sizeof(ref));
+	da_push_back_array(out_data, out->data, out->size);
+
+	caption_frame_init(&cf);
+	caption_frame_from_text(&cf, &output->caption_head->text[0]);
+
+	sei_from_caption_frame(&sei, &cf);
+
+	data = malloc(sei_render_size(&sei));
+	size = sei_render(&sei, data);
+	/* TODO SEI should come after AUD/SPS/PPS, but before any VCL */
+	da_push_back_array(out_data, nal_start, 4);
+	da_push_back_array(out_data, data, size);
+	free(data);
+
+	obs_encoder_packet_release(out);
+
+	*out = backup;
+	out->data = (uint8_t*)out_data.array + sizeof(ref);
+	out->size = out_data.num - sizeof(ref);
+
+	sei_free(&sei);
+
+	struct caption_text *next = output->caption_head->next;
+	bfree(output->caption_head);
+	output->caption_head = next;
+	return true;
+}
+#endif
+
 static inline void send_interleaved(struct obs_output *output)
 {
 	struct encoder_packet out = output->interleaved_packets.array[0];
 
 	/* do not send an interleaved packet if there's no packet of the
-	 * opposing type of a higher timstamp in the interleave buffer.
+	 * opposing type of a higher timestamp in the interleave buffer.
 	 * this ensures that the timestamps are monotonic */
 	if (!has_higher_opposing_ts(output, &out))
 		return;
 
-	if (out.type == OBS_ENCODER_VIDEO)
+	da_erase(output->interleaved_packets, 0);
+
+	if (out.type == OBS_ENCODER_VIDEO) {
 		output->total_frames++;
 
-	da_erase(output->interleaved_packets, 0);
+#if BUILD_CAPTIONS
+		pthread_mutex_lock(&output->caption_mutex);
+
+		double frame_timestamp = (out.pts * out.timebase_num) /
+			(double)out.timebase_den;
+
+		/* TODO if output->caption_timestamp is more than 5 seconds
+		 * old, send empty frame */
+		if (output->caption_head &&
+		    output->caption_timestamp <= frame_timestamp) {
+			blog(LOG_INFO,"Sending caption: %f \"%s\"",
+					frame_timestamp,
+					&output->caption_head->text[0]);
+
+			if (add_caption(output, &out)) {
+				output->caption_timestamp =
+					frame_timestamp + 2.0;
+			}
+		}
+
+		pthread_mutex_unlock(&output->caption_mutex);
+#endif
+	}
+
 	output->info.encoded_packet(output->context.data, &out);
-	obs_free_encoder_packet(&out);
+	obs_encoder_packet_release(&out);
 }
 
 static inline void set_higher_ts(struct obs_output *output,
@@ -1056,7 +1161,7 @@ static void discard_to_idx(struct obs_output *output, size_t idx)
 	for (size_t i = 0; i < idx; i++) {
 		struct encoder_packet *packet =
 			&output->interleaved_packets.array[i];
-		obs_free_encoder_packet(packet);
+		obs_encoder_packet_release(packet);
 	}
 
 	da_erase_range(output->interleaved_packets, 0, idx);
@@ -1208,7 +1313,7 @@ static bool initialize_interleaved_packets(struct obs_output *output)
 	}
 
 	/* get new offsets */
-	output->video_offset = video->dts;
+	output->video_offset = video->pts;
 	for (size_t i = 0; i < audio_mixes; i++)
 		output->audio_offsets[i] = audio[i]->dts;
 
@@ -1244,8 +1349,12 @@ static inline void insert_interleaved_packet(struct obs_output *output,
 		struct encoder_packet *cur_packet;
 		cur_packet = output->interleaved_packets.array + idx;
 
-		if (out->dts_usec < cur_packet->dts_usec)
+		if (out->dts_usec == cur_packet->dts_usec &&
+		    out->type == OBS_ENCODER_VIDEO) {
 			break;
+		} else if (out->dts_usec < cur_packet->dts_usec) {
+			break;
+		}
 	}
 
 	da_insert(output->interleaved_packets, idx, out);
@@ -1304,7 +1413,7 @@ static void interleave_packets(void *data, struct encoder_packet *packet)
 		pthread_mutex_unlock(&output->interleaved_mutex);
 
 		if (output->active_delay_ns)
-			obs_free_encoder_packet(packet);
+			obs_encoder_packet_release(packet);
 		return;
 	}
 
@@ -1313,7 +1422,7 @@ static void interleave_packets(void *data, struct encoder_packet *packet)
 	if (output->active_delay_ns)
 		out = *packet;
 	else
-		obs_duplicate_encoder_packet(&out, packet);
+		obs_encoder_packet_create_instance(&out, packet);
 
 	if (was_started)
 		apply_interleaved_packet_offset(output, &out);
@@ -1356,7 +1465,7 @@ static void default_encoded_callback(void *param, struct encoder_packet *packet)
 	}
 
 	if (output->active_delay_ns)
-		obs_free_encoder_packet(packet);
+		obs_encoder_packet_release(packet);
 }
 
 static void default_raw_video_callback(void *param, struct video_data *frame)
@@ -1444,7 +1553,7 @@ static void hook_data_capture(struct obs_output *output, bool encoded,
 					encoded_callback, output);
 	} else {
 		if (has_video)
-			video_output_connect(output->video,
+			start_raw_video(output->video,
 					get_video_conversion(output),
 					default_raw_video_callback, output);
 		if (has_audio)
@@ -1479,12 +1588,15 @@ static inline void signal_reconnect_success(struct obs_output *output)
 static inline void signal_stop(struct obs_output *output)
 {
 	struct calldata params;
-	uint8_t stack[128];
 
-	calldata_init_fixed(&params, stack, sizeof(stack));
+	calldata_init(&params);
+	calldata_set_string(&params, "last_error", output->last_error_message);
 	calldata_set_int(&params, "code", output->stop_code);
 	calldata_set_ptr(&params, "output", output);
+
 	signal_handler_signal(output->context.signals, "stop", &params);
+
+	calldata_free(&params);
 }
 
 static inline void convert_flags(const struct obs_output *output,
@@ -1697,7 +1809,7 @@ static void *end_data_capture_thread(void *data)
 			stop_audio_encoders(output, encoded_callback);
 	} else {
 		if (has_video)
-			video_output_disconnect(output->video,
+			stop_raw_video(output->video,
 					default_raw_video_callback, output);
 		if (has_audio)
 			audio_output_disconnect(output->audio,
@@ -1731,6 +1843,7 @@ static void obs_output_end_data_capture_internal(obs_output_t *output,
 		if (signal) {
 			signal_stop(output);
 			output->stop_code = OBS_OUTPUT_SUCCESS;
+			os_event_signal(output->stopping_event);
 		}
 		return;
 	}
@@ -1953,4 +2066,129 @@ const char *obs_output_get_id(const obs_output_t *output)
 {
 	return obs_output_valid(output, "obs_output_get_id")
 		? output->info.id : NULL;
+}
+
+#if BUILD_CAPTIONS
+static struct caption_text *caption_text_new(const char *text, size_t bytes,
+		struct caption_text *tail, struct caption_text **head)
+{
+	struct caption_text *next = bzalloc(sizeof(struct caption_text));
+	snprintf(&next->text[0], CAPTION_LINE_BYTES + 1, "%.*s",
+			(int)bytes, text);
+
+	if (!*head) {
+		*head = next;
+	} else {
+		tail->next = next;
+	}
+
+	return next;
+}
+
+void obs_output_output_caption_text1(obs_output_t *output, const char *text)
+{
+	if (!obs_output_valid(output, "obs_output_output_caption_text1"))
+		return;
+	if (!active(output))
+		return;
+
+	// split text into 32 character strings
+	int size = (int)strlen(text);
+	int r;
+	size_t char_count;
+	size_t line_length = 0;
+	size_t trimmed_length = 0;
+
+	blog(LOG_DEBUG, "Caption text: %s", text);
+
+	pthread_mutex_lock(&output->caption_mutex);
+
+	for (r = 0 ; 0 < size && CAPTION_LINE_CHARS > r; ++r) {
+		line_length = utf8_line_length(text);
+		trimmed_length = utf8_trimmed_length(text, line_length);
+		char_count = utf8_char_count(text, trimmed_length);
+
+		if (SCREEN_COLS < char_count) {
+			char_count = utf8_wrap_length(text, CAPTION_LINE_CHARS);
+			line_length = utf8_string_length(text, char_count + 1);
+		}
+
+		output->caption_tail = caption_text_new(
+				text,
+				line_length,
+				output->caption_tail,
+				&output->caption_head);
+
+		text += line_length;
+		size -= (int)line_length;
+	}
+
+	pthread_mutex_unlock(&output->caption_mutex);
+}
+#endif
+
+float obs_output_get_congestion(obs_output_t *output)
+{
+	if (!obs_output_valid(output, "obs_output_get_congestion"))
+		return 0;
+
+	if (output->info.get_congestion) {
+		float val = output->info.get_congestion(output->context.data);
+		if (val < 0.0f) val = 0.0f;
+		else if (val > 1.0f) val = 1.0f;
+		return val;
+	}
+	return 0;
+}
+
+int obs_output_get_connect_time_ms(obs_output_t *output)
+{
+	if (!obs_output_valid(output, "obs_output_get_connect_time_ms"))
+		return -1;
+
+	if (output->info.get_connect_time_ms)
+		return output->info.get_connect_time_ms(output->context.data);
+	return -1;
+}
+
+const char *obs_output_get_last_error(obs_output_t *output)
+{
+	if (!obs_output_valid(output, "obs_output_get_last_error"))
+		return NULL;
+
+	return output->last_error_message;
+}
+
+void obs_output_set_last_error(obs_output_t *output, const char *message)
+{
+	if (!obs_output_valid(output, "obs_output_set_last_error"))
+		return;
+
+	if (output->last_error_message)
+		bfree(output->last_error_message);
+
+	if (message)
+		output->last_error_message = bstrdup(message);
+	else
+		output->last_error_message = NULL;
+}
+
+bool obs_output_reconnecting(const obs_output_t *output)
+{
+	if (!obs_output_valid(output, "obs_output_reconnecting"))
+		return false;
+
+	return reconnecting(output);
+}
+
+const char *obs_output_get_supported_video_codecs(const obs_output_t *output)
+{
+	return obs_output_valid(output, __FUNCTION__) ?
+		output->info.encoded_video_codecs : NULL;
+}
+
+const char *obs_output_get_supported_audio_codecs(const obs_output_t *output)
+{
+	return obs_output_valid(output, __FUNCTION__) ?
+		output->info.encoded_audio_codecs : NULL;
 }

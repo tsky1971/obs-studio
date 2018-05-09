@@ -4,7 +4,9 @@ find_package(ZMQ REQUIRED)
 include_directories(${ZMQ_INCLUDE_DIRS})
 
 set(win-capture_HEADERS
+	nt-stuff.h
 	obfuscate.h
+	app-helpers.h
 	hook-helpers.h
 	inject-library.h
 	cursor-capture.h
@@ -15,6 +17,7 @@ set(win-capture_HEADERS
 set(win-capture_SOURCES
 	dc-capture.c
 	obfuscate.c
+	app-helpers.c
 	inject-library.c
 	cursor-capture.c
 	game-capture.c

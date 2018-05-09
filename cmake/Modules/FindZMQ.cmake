@@ -37,7 +37,7 @@ find_path(ZMQ_INCLUDE_DIR
 		include)
 
 find_library(ZMQ_LIB
-	NAMES ${_ZMQ_LIBRARIES} libzmq-v120-mt-4_0_4
+	NAMES ${_ZMQ_LIBRARIES} libzmq-mt-4_3_1
 	HINTS
 		ENV zmqPath${_lib_suffix}
 		ENV zmqPath

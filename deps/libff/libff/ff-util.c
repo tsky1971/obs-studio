@@ -16,10 +16,20 @@
 
 #include "ff-util.h"
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4244)
+#pragma warning(disable : 4204)
+#endif
+
 #include <libavcodec/avcodec.h>
 #include <libavdevice/avdevice.h>
 #include <libavformat/avformat.h>
 #include <libavutil/log.h>
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #include <stdbool.h>
 
@@ -47,7 +57,7 @@ struct ff_codec_desc {
 void ff_init()
 {
 	av_register_all();
-	avdevice_register_all();
+	//avdevice_register_all();
 	avcodec_register_all();
 	avformat_network_init();
 }
@@ -68,7 +78,7 @@ static bool get_codecs(const AVCodecDescriptor*** descs, unsigned int *size)
 	unsigned int codec_count = 0;
 	unsigned int i = 0;
 
-	while ((desc = avcodec_descriptor_next(desc)))
+	while ((desc = avcodec_descriptor_next(desc)) != NULL)
 		codec_count++;
 
 	codecs = av_calloc(codec_count, sizeof(AVCodecDescriptor *));
@@ -79,7 +89,7 @@ static bool get_codecs(const AVCodecDescriptor*** descs, unsigned int *size)
 		return false;
 	}
 
-	while ((desc = avcodec_descriptor_next(desc)))
+	while ((desc = avcodec_descriptor_next(desc)) != NULL)
 		codecs[i++] = desc;
 
 	*size = codec_count;
@@ -89,7 +99,7 @@ static bool get_codecs(const AVCodecDescriptor*** descs, unsigned int *size)
 
 static const AVCodec *next_codec_for_id(enum AVCodecID id, const AVCodec *prev)
 {
-    while ((prev = av_codec_next(prev))) {
+    while ((prev = av_codec_next(prev)) != NULL) {
         if (prev->id == id && av_codec_is_encoder(prev))
             return prev;
     }
@@ -99,7 +109,8 @@ static const AVCodec *next_codec_for_id(enum AVCodecID id, const AVCodec *prev)
 
 static void add_codec_to_list(const struct ff_format_desc *format_desc,
 		struct ff_codec_desc **first, struct ff_codec_desc **current,
-		enum AVCodecID id, const AVCodec *codec)
+		enum AVCodecID id, const AVCodec *codec,
+		bool ignore_compatability)
 {
 	if (codec == NULL)
 		codec = avcodec_find_encoder(id);
@@ -112,11 +123,13 @@ static void add_codec_to_list(const struct ff_format_desc *format_desc,
 	if (!av_codec_is_encoder(codec))
 		return;
 
-	// Format doesn't support this codec
-	unsigned int tag = av_codec_get_tag(format_desc->codec_tags,
-			codec->id);
-	if (tag == 0)
-		return;
+	if (!ignore_compatability) {
+		// Format doesn't support this codec
+		unsigned int tag = av_codec_get_tag(format_desc->codec_tags,
+				codec->id);
+		if (tag == 0)
+			return;
+	}
 
 	struct ff_codec_desc *d = av_mallocz(sizeof(struct ff_codec_desc));
 
@@ -150,16 +163,17 @@ static void add_codec_to_list(const struct ff_format_desc *format_desc,
 
 static void get_codecs_for_id(const struct ff_format_desc *format_desc,
 		struct ff_codec_desc **first, struct ff_codec_desc **current,
-		enum AVCodecID id)
+		enum AVCodecID id, bool ignore_compatability)
 {
 	const AVCodec *codec = NULL;
-	while ((codec = next_codec_for_id(id, codec)))
+	while ((codec = next_codec_for_id(id, codec)) != NULL)
 		add_codec_to_list(format_desc, first, current, codec->id,
-				codec);
+				codec, ignore_compatability);
 }
 
 const struct ff_codec_desc *ff_codec_supported(
-		const struct ff_format_desc *format_desc)
+		const struct ff_format_desc *format_desc,
+		bool ignore_compatability)
 {
 	const AVCodecDescriptor **codecs;
 	unsigned int size;
@@ -172,7 +186,8 @@ const struct ff_codec_desc *ff_codec_supported(
 
 	for(i = 0; i < size; i++) {
 		const AVCodecDescriptor *codec = codecs[i];
-		get_codecs_for_id(format_desc, &first, &current, codec->id);
+		get_codecs_for_id(format_desc, &first, &current, codec->id,
+				ignore_compatability);
 	}
 
 	av_free((void *)codecs);
@@ -272,7 +287,7 @@ const struct ff_format_desc *ff_format_supported()
 	struct ff_format_desc *desc = NULL;
 	struct ff_format_desc *current = NULL;
 
-	while ((output_format = av_oformat_next(output_format))) {
+	while ((output_format = av_oformat_next(output_format)) != NULL) {
 		struct ff_format_desc *d;
 		if (is_output_device(output_format->priv_class))
 			continue;

@@ -35,6 +35,9 @@ static struct obs_source_info freetype2_source_info = {
 	.id = "text_ft2_source",
 	.type = OBS_SOURCE_TYPE_INPUT,
 	.output_flags = OBS_SOURCE_VIDEO |
+#ifdef _WIN32
+	                OBS_SOURCE_DEPRECATED |
+#endif
 	                OBS_SOURCE_CUSTOM_DRAW,
 	.get_name = ft2_source_get_name,
 	.create = ft2_source_create,
@@ -47,6 +50,26 @@ static struct obs_source_info freetype2_source_info = {
 	.get_properties = ft2_source_properties,
 };
 
+static bool plugin_initialized = false;
+
+static void init_plugin(void)
+{
+	if (plugin_initialized)
+		return;
+
+	FT_Init_FreeType(&ft2_lib);
+
+	if (ft2_lib == NULL) {
+		blog(LOG_WARNING, "FT2-text: Failed to initialize FT2.");
+		return;
+	}
+
+	if (!load_cached_os_font_list())
+		load_os_font_list();
+
+	plugin_initialized = true;
+}
+
 bool obs_module_load()
 {
 	char *config_dir = obs_module_config_path(NULL);
@@ -55,16 +78,6 @@ bool obs_module_load()
 		bfree(config_dir);
 	}
 
-	FT_Init_FreeType(&ft2_lib);
-
-	if (ft2_lib == NULL) {
-		blog(LOG_WARNING, "FT2-text: Failed to initialize FT2.");
-		return false;
-	}
-
-	if (!load_cached_os_font_list())
-		load_os_font_list();
-
 	obs_register_source(&freetype2_source_info);
 
 	return true;
@@ -72,8 +85,10 @@ bool obs_module_load()
 
 void obs_module_unload(void)
 {
-	free_os_font_list();
-	FT_Done_FreeType(ft2_lib);
+	if (plugin_initialized) {
+		free_os_font_list();
+		FT_Done_FreeType(ft2_lib);
+	}
 }
 
 static const char *ft2_source_get_name(void *unused)
@@ -121,6 +136,9 @@ static obs_properties_t *ft2_source_properties(void *unused)
 	obs_properties_add_bool(props, "log_mode",
 		obs_module_text("ChatLogMode"));
 
+	obs_properties_add_int(props, "log_lines",
+		obs_module_text("ChatLogLines"), 1, 1000, 1);
+
 	obs_properties_add_path(props,
 		"text_file", obs_module_text("TextFile"),
 		OBS_PATH_FILE, obs_module_text("TextFileFilter"), NULL);
@@ -154,7 +172,7 @@ static void ft2_source_destroy(void *data)
 		FT_Done_Face(srcdata->font_face);
 		srcdata->font_face = NULL;
 	}
-	
+
 	for (uint32_t i = 0; i < num_cache_slots; i++) {
 		if (srcdata->cacheglyphs[i] != NULL) {
 			bfree(srcdata->cacheglyphs[i]);
@@ -223,7 +241,7 @@ static void ft2_video_tick(void *data, float seconds)
 		time_t t = get_modified_timestamp(srcdata->text_file);
 		srcdata->last_checked = os_gettime_ns();
 
-		if (srcdata->m_timestamp != t) {
+		if (srcdata->update_file) {
 			if (srcdata->log_mode)
 				read_from_end(srcdata, srcdata->text_file);
 			else
@@ -231,6 +249,12 @@ static void ft2_video_tick(void *data, float seconds)
 					srcdata->text_file);
 			cache_glyphs(srcdata, srcdata->text);
 			set_up_vertex_buffer(srcdata);
+			srcdata->update_file = false;
+		}
+
+		if (srcdata->m_timestamp != t) {
+			srcdata->m_timestamp = t;
+			srcdata->update_file = true;
 		}
 	}
 
@@ -303,7 +327,12 @@ static void ft2_source_update(void *data, obs_data_t *settings)
 
 	bool from_file = obs_data_get_bool(settings, "from_file");
 	bool chat_log_mode = obs_data_get_bool(settings, "log_mode");
+	uint32_t log_lines = (uint32_t)obs_data_get_int(settings, "log_lines");
 
+	if (srcdata->log_lines != log_lines) {
+		srcdata->log_lines = log_lines;
+		vbuf_needs_update = true;
+	}
 	srcdata->log_mode = chat_log_mode;
 
 	if (ft2_lib == NULL) goto error;
@@ -360,7 +389,7 @@ static void ft2_source_update(void *data, obs_data_t *settings)
 		goto error;
 	}
 	else {
-		FT_Set_Pixel_Sizes(srcdata->font_face, 0, srcdata->font_size); 
+		FT_Set_Pixel_Sizes(srcdata->font_face, 0, srcdata->font_size);
 		FT_Select_Charmap(srcdata->font_face, FT_ENCODING_UNICODE);
 	}
 
@@ -439,11 +468,15 @@ static void *ft2_source_create(obs_data_t *settings, obs_source_t *source)
 	obs_data_t *font_obj = obs_data_create();
 	srcdata->src = source;
 
+	init_plugin();
+
 	srcdata->font_size = 32;
 
 	obs_data_set_default_string(font_obj, "face", DEFAULT_FACE);
 	obs_data_set_default_int(font_obj, "size", 32);
 	obs_data_set_default_obj(settings, "font", font_obj);
+
+	obs_data_set_default_int(settings, "log_lines", 6);
 
 	obs_data_set_default_int(settings, "color1", 0xFFFFFFFF);
 	obs_data_set_default_int(settings, "color2", 0xFFFFFFFF);
